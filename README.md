@@ -1,4 +1,4 @@
-![VSTS Build Status](https://microsoft.visualstudio.com/_apis/public/build/definitions/8d47e068-03c8-4cdc-aa9b-fc6929290322/25012/badge "Build Status")
+[![Build status](https://microsoft.visualstudio.com/OS/_apis/build/status/aspnet.api.versioning/Release)](https://microsoft.visualstudio.com/OS/_build/latest?definitionId=25025 "Build status")
 
 # ASP.NET API Versioning
 
@@ -58,10 +58,19 @@ This is also the home of the ASP.NET API versioning API explorers that you can u
   [samples](../../tree/master/samples/aspnetcore/SwaggerODataSample) )
   <br>Adds additional API explorer support to your ASP.NET Core applications using OData v4.0
 
-You can additional find samples, documentation, and getting started instructions in the [wiki](../../wiki).
+You can find additional samples, documentation, and getting started instructions in the [wiki](../../wiki).
 
 ## Discussion
-Have a general question, suggestion, or other feedback? Join the [discussion](https://teams.microsoft.com/l/channel/19%3af8fdae88689b445bac337554b05d24da%40thread.skype/General?groupId=8ac1a7bf-c9f0-4e50-a657-dc4a357e5249&tenantId=72f988bf-86f1-41af-91ab-2d7cd011db47) on Microsoft Teams.
+
+Have a general question, suggestion, or other feedback? Check out how you can [contribute](CONTRIBUTING.md).
+
+## Reporting security issues and bugs
+
+Security issues and bugs should be reported privately, via email, to the Microsoft Security Response Center (MSRC) [secure@microsoft.com](mailto:secure@microsoft.com). You should receive a response within 24 hours. If for some reason you do not, please follow up via email to ensure we received your original message. Further information, including the MSRC PGP key, can be found in the [Security TechCenter](https://technet.microsoft.com/en-us/security/ff852094.aspx).
+
+## Code of conduct
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).  For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
 ----
 > If you are an existing user, please makes sure you review the [release notes](../../releases) between all major and minor package releases.

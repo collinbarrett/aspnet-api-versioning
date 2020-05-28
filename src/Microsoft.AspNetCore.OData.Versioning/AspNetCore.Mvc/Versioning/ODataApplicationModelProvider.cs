@@ -1,4 +1,6 @@
-﻿namespace Microsoft.AspNetCore.Mvc.Versioning
+﻿#pragma warning disable CA1812
+
+namespace Microsoft.AspNetCore.Mvc.Versioning
 {
     using Microsoft.AspNetCore.Mvc.ApplicationModels;
     using Microsoft.Extensions.Options;
@@ -16,8 +18,17 @@
 
         public void OnProvidersExecuted( ApplicationModelProviderContext context )
         {
-            var convention = new MetadataControllerConvention( Options );
-            convention.Apply( context.Result );
+            var application = context.Result;
+            var conventions = new IApplicationModelConvention[]
+            {
+                new MetadataControllerConvention( Options ),
+                new ApiExplorerModelConvention(),
+            };
+
+            for ( var i = 0; i < conventions.Length; i++ )
+            {
+                conventions[i].Apply( application );
+            }
         }
 
         public void OnProvidersExecuting( ApplicationModelProviderContext context ) { }

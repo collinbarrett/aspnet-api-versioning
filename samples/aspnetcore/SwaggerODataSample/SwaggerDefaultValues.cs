@@ -1,6 +1,8 @@
 ﻿namespace Microsoft.Examples
 {
-    using Swashbuckle.AspNetCore.Swagger;
+    using Microsoft.AspNetCore.Mvc.ApiExplorer;
+    using Microsoft.OpenApi.Any;
+    using Microsoft.OpenApi.Models;
     using Swashbuckle.AspNetCore.SwaggerGen;
     using System.Linq;
 
@@ -16,8 +18,12 @@
         /// </summary>
         /// <param name="operation">The operation to apply the filter to.</param>
         /// <param name="context">The current operation filter context.</param>
-        public void Apply( Operation operation, OperationFilterContext context )
+        public void Apply( OpenApiOperation operation, OperationFilterContext context )
         {
+            var apiDescription = context.ApiDescription;
+
+            operation.Deprecated |= apiDescription.IsDeprecated();
+
             if ( operation.Parameters == null )
             {
                 return;
@@ -25,27 +31,21 @@
 
             // REF: https://github.com/domaindrivendev/Swashbuckle.AspNetCore/issues/412
             // REF: https://github.com/domaindrivendev/Swashbuckle.AspNetCore/pull/413
-            foreach ( var parameter in operation.Parameters.OfType<NonBodyParameter>() )
+            foreach ( var parameter in operation.Parameters )
             {
-                var description = context.ApiDescription.ParameterDescriptions.First( p => p.Name == parameter.Name );
-                var routeInfo = description.RouteInfo;
+                var description = apiDescription.ParameterDescriptions.First( p => p.Name == parameter.Name );
 
                 if ( parameter.Description == null )
                 {
                     parameter.Description = description.ModelMetadata?.Description;
                 }
 
-                if ( routeInfo == null )
+                if ( parameter.Schema.Default == null && description.DefaultValue != null )
                 {
-                    continue;
+                    parameter.Schema.Default = new OpenApiString( description.DefaultValue.ToString() );
                 }
 
-                if ( parameter.Default == null )
-                {
-                    parameter.Default = routeInfo.DefaultValue;
-                }
-
-                parameter.Required |= !routeInfo.IsOptional;
+                parameter.Required |= description.IsRequired;
             }
         }
     }

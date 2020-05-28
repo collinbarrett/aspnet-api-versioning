@@ -17,7 +17,7 @@
         /// <remarks>
         /// <para>
         /// Configuration of the API versioning middleware is not necessary unless you explicitly
-        /// want to control when the middleware is added in the pipline. API versioning automatically configures
+        /// want to control when the middleware is added in the pipeline. API versioning automatically configures
         /// the required middleware, which is usually early enough for dependent middleware.
         /// </para>
         /// <para>
@@ -25,10 +25,7 @@
         /// <see cref="ApiVersioningOptions.RegisterMiddleware"/> to <c>false</c>.
         /// </para>
         /// </remarks>
-        public static IApplicationBuilder UseApiVersioning( this IApplicationBuilder app )
-        {
-            Arg.NotNull( app, nameof( app ) );
-            return app.UseMiddleware<ApiVersioningMiddleware>();
-        }
+        public static IApplicationBuilder UseApiVersioning( this IApplicationBuilder app ) =>
+            app.UseMiddleware<ApiVersioningMiddleware>();
     }
 }

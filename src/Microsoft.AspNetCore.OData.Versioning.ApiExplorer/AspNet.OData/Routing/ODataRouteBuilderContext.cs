@@ -3,42 +3,33 @@
     using Microsoft.AspNet.OData;
     using Microsoft.AspNetCore.Mvc.ApiExplorer;
     using Microsoft.AspNetCore.Mvc.Controllers;
+    using Microsoft.AspNetCore.Mvc.ModelBinding;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.OData;
     using Microsoft.OData.Edm;
-    using System;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Reflection;
-    using static Microsoft.OData.ODataUrlKeyDelimiter;
     using static System.Linq.Enumerable;
 
     partial class ODataRouteBuilderContext
     {
-        private IODataPathTemplateHandler templateHandler;
+        private IODataPathTemplateHandler? templateHandler;
 
         internal ODataRouteBuilderContext(
             ODataRouteMapping routeMapping,
             ControllerActionDescriptor actionDescriptor,
-            IEnumerable<Assembly> assemblies,
             ODataApiExplorerOptions options )
         {
-            Contract.Requires( routeMapping != null );
-            Contract.Requires( assemblies != null );
-            Contract.Requires( actionDescriptor != null );
-            Contract.Requires( options != null );
-
             ApiVersion = routeMapping.ApiVersion;
-            serviceProvider = routeMapping.Services;
-            EdmModel = serviceProvider.GetRequiredService<IEdmModel>();
-            Assemblies = assemblies;
+            Services = routeMapping.Services;
+            EdmModel = Services.GetRequiredService<IEdmModel>();
             routeAttribute = actionDescriptor.MethodInfo.GetCustomAttributes<ODataRouteAttribute>().FirstOrDefault();
             RouteTemplate = routeAttribute?.PathTemplate;
             Route = routeMapping.Route;
             ActionDescriptor = actionDescriptor;
             ParameterDescriptions = new List<ApiParameterDescription>();
             Options = options;
-            UrlKeyDelimiter = serviceProvider.GetRequiredService<ODataOptions>().UrlKeyDelimiter ?? Parentheses;
+            UrlKeyDelimiter = UrlKeyDelimiterOrDefault( Services.GetRequiredService<ODataOptions>().UrlKeyDelimiter );
 
             var container = EdmModel.EntityContainer;
 
@@ -57,9 +48,9 @@
             ActionType = GetActionType( EntitySet, Operation );
         }
 
-        internal IServiceProvider Services => serviceProvider;
-
         internal IODataPathTemplateHandler PathTemplateHandler =>
-            templateHandler ?? ( templateHandler = serviceProvider.GetRequiredService<IODataPathTemplateHandler>() );
+            templateHandler ??= Services.GetRequiredService<IODataPathTemplateHandler>();
+
+        internal IModelMetadataProvider? ModelMetadataProvider { get; set; }
     }
 }

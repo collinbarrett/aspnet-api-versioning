@@ -11,7 +11,6 @@
     using Microsoft.Extensions.DependencyInjection.Extensions;
     using Microsoft.Extensions.Options;
     using System;
-    using System.Diagnostics.Contracts;
     using static ServiceDescriptor;
 
     /// <summary>
@@ -27,11 +26,7 @@
         /// <returns>The original <paramref name="services"/> object.</returns>
         public static IServiceCollection AddApiVersioning( this IServiceCollection services )
         {
-            Arg.NotNull( services, nameof( services ) );
-            Contract.Ensures( Contract.Result<IServiceCollection>() != null );
-
             AddApiVersioningServices( services );
-
             return services;
         }
 
@@ -43,29 +38,33 @@
         /// <returns>The original <paramref name="services"/> object.</returns>
         public static IServiceCollection AddApiVersioning( this IServiceCollection services, Action<ApiVersioningOptions> setupAction )
         {
-            Arg.NotNull( services, nameof( services ) );
-            Arg.NotNull( setupAction, nameof( setupAction ) );
-            Contract.Ensures( Contract.Result<IServiceCollection>() != null );
-
             AddApiVersioningServices( services );
             services.Configure( setupAction );
-
             return services;
         }
 
         static void AddApiVersioningServices( IServiceCollection services )
         {
+            if ( services == null )
+            {
+                throw new ArgumentNullException( nameof( services ) );
+            }
+
             services.Add( Singleton( sp => sp.GetRequiredService<IOptions<ApiVersioningOptions>>().Value.ApiVersionReader ) );
             services.Add( Singleton( sp => sp.GetRequiredService<IOptions<ApiVersioningOptions>>().Value.ApiVersionSelector ) );
             services.Add( Singleton( sp => sp.GetRequiredService<IOptions<ApiVersioningOptions>>().Value.ErrorResponses ) );
             services.Replace( Singleton<IActionSelector, ApiVersionActionSelector>() );
             services.TryAddSingleton<IApiVersionRoutePolicy, DefaultApiVersionRoutePolicy>();
+            services.TryAddSingleton<IApiControllerFilter, DefaultApiControllerFilter>();
             services.TryAddSingleton<ReportApiVersionsAttribute>();
+            services.AddSingleton<ApplyContentTypeVersionActionFilter>();
             services.TryAddSingleton( OnRequestIReportApiVersions );
             services.TryAddEnumerable( Transient<IPostConfigureOptions<MvcOptions>, ApiVersioningMvcOptionsSetup>() );
             services.TryAddEnumerable( Transient<IPostConfigureOptions<RouteOptions>, ApiVersioningRouteOptionsSetup>() );
             services.TryAddEnumerable( Transient<IApplicationModelProvider, ApiVersioningApplicationModelProvider>() );
             services.TryAddEnumerable( Transient<IActionDescriptorProvider, ApiVersionCollator>() );
+            services.TryAddEnumerable( Transient<IApiControllerSpecification, ApiBehaviorSpecification>() );
+            services.TryAddEnumerable( Singleton<MatcherPolicy, ApiVersionMatcherPolicy>() );
             services.AddTransient<IStartupFilter, AutoRegisterMiddleware>();
         }
 

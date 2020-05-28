@@ -3,24 +3,34 @@
     using Microsoft.AspNetCore.Mvc.ApplicationModels;
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Linq;
     using System.Reflection;
+    using static System.Linq.Enumerable;
 
-    /// <content>
-    /// Provides additional implementation specific to Microsoft ASP.NET Core.
-    /// </content>
+    /// <summary>
+    /// Represents the base implementation of a builder for API versions applied to a controller.
+    /// </summary>
     [CLSCompliant( false )]
-    public partial class ControllerApiVersionConventionBuilderBase : IApiVersionConvention<ControllerModel>
+    public abstract class ControllerApiVersionConventionBuilderBase : ApiVersionConventionBuilderBase, IApiVersionConvention<ControllerModel>
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ControllerApiVersionConventionBuilderBase"/> class.
+        /// </summary>
+        protected ControllerApiVersionConventionBuilderBase() { }
+
         /// <summary>
         /// Applies the builder conventions to the specified controller.
         /// </summary>
         /// <param name="controllerModel">The <see cref="ControllerModel">controller model</see> to apply the conventions to.</param>
         public virtual void ApplyTo( ControllerModel controllerModel )
         {
-            Arg.NotNull( controllerModel, nameof( controllerModel ) );
-            ApplyActionConventions( controllerModel, ApplyControllerConventions( controllerModel ) );
+            if ( controllerModel == null )
+            {
+                throw new ArgumentNullException( nameof( controllerModel ) );
+            }
+
+            MergeAttributesWithConventions( controllerModel.Attributes );
+            ApplyActionConventions( controllerModel );
         }
 
         /// <summary>
@@ -29,108 +39,76 @@
         /// <param name="method">The <see cref="MethodInfo">method</see> representing the action to retrieve the convention for.</param>
         /// <param name="convention">The retrieved <see cref="IApiVersionConvention{T}">convention</see> or <c>null</c>.</param>
         /// <returns>True if the convention was successfully retrieved; otherwise, false.</returns>
-        protected abstract bool TryGetConvention( MethodInfo method, out IApiVersionConvention<ActionModel> convention );
+        protected abstract bool TryGetConvention( MethodInfo method, out IApiVersionConvention<ActionModel>? convention );
 
-        static void ApplyNeutralModelToActions( ControllerModel controller )
+        void ApplyActionConventions( ControllerModel controller )
         {
-            Contract.Requires( controller != null );
-
-            foreach ( var action in controller.Actions )
-            {
-                action.SetProperty( controller );
-                action.SetProperty( ApiVersionModel.Neutral );
-            }
-        }
-
-        Tuple<IEnumerable<ApiVersion>, IEnumerable<ApiVersion>, IEnumerable<ApiVersion>, IEnumerable<ApiVersion>> ApplyControllerConventions( ControllerModel controllerModel )
-        {
-            Contract.Requires( controllerModel != null );
-
-            MergeControllerAttributesWithConventions( controllerModel );
-
             if ( VersionNeutral )
             {
-                controllerModel.SetProperty( ApiVersionModel.Neutral );
-            }
-            else
-            {
-                controllerModel.SetProperty( new ApiVersionModel( VersionNeutral, supportedVersions, deprecatedVersions, advertisedVersions, deprecatedAdvertisedVersions ) );
-            }
+                controller.SetProperty( ApiVersionModel.Neutral );
 
-            return Tuple.Create( supportedVersions.AsEnumerable(), deprecatedVersions.AsEnumerable(), advertisedVersions.AsEnumerable(), deprecatedAdvertisedVersions.AsEnumerable() );
-        }
+                for ( var i = 0; i < controller.Actions.Count; i++ )
+                {
+                    var action = controller.Actions[i];
 
-        void MergeControllerAttributesWithConventions( ControllerModel controllerModel )
-        {
-            Contract.Requires( controllerModel != null );
+                    action.SetProperty( controller );
+                    action.SetProperty( ApiVersionModel.Neutral );
+                }
 
-            if ( VersionNeutral |= controllerModel.Attributes.OfType<IApiVersionNeutral>().Any() )
-            {
                 return;
             }
 
-            var providers = controllerModel.Attributes.OfType<IApiVersionProvider>().ToArray();
+            controller.SetProperty( new ApiVersionModel( SupportedVersions, DeprecatedVersions, AdvertisedVersions, DeprecatedAdvertisedVersions ) );
 
-            if ( providers.Length == 0 )
+            var anyController = new ControllerApiVersionConventionBuilder( typeof( ControllerBase ) );
+
+            for ( var i = 0; i < controller.Actions.Count; i++ )
             {
-                return;
-            }
-
-            supportedVersions.UnionWith( from provider in providers
-                                         where !provider.AdvertiseOnly && !provider.Deprecated
-                                         from version in provider.Versions
-                                         select version );
-
-            deprecatedVersions.UnionWith( from provider in providers
-                                          where !provider.AdvertiseOnly && provider.Deprecated
-                                          from version in provider.Versions
-                                          select version );
-
-            advertisedVersions.UnionWith( from provider in providers
-                                          where provider.AdvertiseOnly && !provider.Deprecated
-                                          from version in provider.Versions
-                                          select version );
-
-            deprecatedAdvertisedVersions.UnionWith( from provider in providers
-                                                    where provider.AdvertiseOnly && provider.Deprecated
-                                                    from version in provider.Versions
-                                                    select version );
-        }
-
-        void ApplyActionConventions( ControllerModel controller, Tuple<IEnumerable<ApiVersion>, IEnumerable<ApiVersion>, IEnumerable<ApiVersion>, IEnumerable<ApiVersion>> controllerVersionInfo )
-        {
-            Contract.Requires( controller != null );
-
-            if ( VersionNeutral )
-            {
-                ApplyNeutralModelToActions( controller );
-            }
-            else
-            {
-                MergeActionAttributesWithConventions( controller, controllerVersionInfo );
-            }
-        }
-
-        void MergeActionAttributesWithConventions( ControllerModel controller, Tuple<IEnumerable<ApiVersion>, IEnumerable<ApiVersion>, IEnumerable<ApiVersion>, IEnumerable<ApiVersion>> controllerVersionInfo )
-        {
-            Contract.Requires( controller != null );
-
-            foreach ( var action in controller.Actions )
-            {
+                var action = controller.Actions[i];
                 var key = action.ActionMethod;
 
-                action.SetProperty( controller );
+                if ( !TryGetConvention( key, out var actionConvention ) )
+                {
+                    actionConvention = new ActionApiVersionConventionBuilder( anyController );
+                }
 
-                if ( TryGetConvention( key, out var actionConvention ) )
+                action.SetProperty( controller );
+                actionConvention!.ApplyTo( action );
+            }
+
+            ApplyInheritedActionConventions( controller.Actions );
+        }
+
+        void ApplyInheritedActionConventions( IList<ActionModel> actions )
+        {
+            var noInheritedApiVersions = SupportedVersions.Count == 0 && DeprecatedVersions.Count == 0 && AdvertisedVersions.Count == 0 && DeprecatedAdvertisedVersions.Count == 0;
+
+            if ( noInheritedApiVersions )
+            {
+                return;
+            }
+
+            for ( var i = 0; i < actions.Count; i++ )
+            {
+                var action = actions[i];
+                var model = action.GetProperty<ApiVersionModel>();
+
+                if ( model == null || model.IsApiVersionNeutral )
                 {
-                    action.SetProperty( controllerVersionInfo );
-                    actionConvention.ApplyTo( action );
-                    action.RemoveProperty( controllerVersionInfo );
+                    continue;
                 }
-                else
-                {
-                    action.SetProperty( new ApiVersionModel( controller, action ) );
-                }
+
+                var supportedVersions = model.SupportedApiVersions.Union( SupportedVersions );
+                var deprecatedVersions = model.DeprecatedApiVersions.Union( DeprecatedVersions );
+
+                model = new ApiVersionModel(
+                   declaredVersions: model.DeclaredApiVersions,
+                   supportedVersions,
+                   deprecatedVersions,
+                   AdvertisedVersions,
+                   DeprecatedAdvertisedVersions );
+
+                action.SetProperty( model );
             }
         }
     }

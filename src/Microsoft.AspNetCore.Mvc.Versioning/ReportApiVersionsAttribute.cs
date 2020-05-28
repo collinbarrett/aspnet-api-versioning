@@ -1,10 +1,12 @@
 ﻿namespace Microsoft.AspNetCore.Mvc
 {
+    using Microsoft.AspNetCore.Http;
     using Microsoft.AspNetCore.Mvc.Abstractions;
-    using Microsoft.AspNetCore.Mvc.ApplicationModels;
     using Microsoft.AspNetCore.Mvc.Filters;
-    using System;
     using Microsoft.AspNetCore.Mvc.Versioning;
+    using System;
+    using System.Threading.Tasks;
+    using static System.Threading.Tasks.Task;
 
     /// <content>
     /// Provides additional implementation specific to ASP.NET Core.
@@ -23,11 +25,7 @@
         /// Initializes a new instance of the <see cref="ReportApiVersionsAttribute"/> class.
         /// </summary>
         /// <param name="reportApiVersions">The <see cref="IReportApiVersions">object</see> used to report API versions.</param>
-        public ReportApiVersionsAttribute( IReportApiVersions reportApiVersions )
-        {
-            Arg.NotNull( reportApiVersions, nameof( reportApiVersions ) );
-            reporter = reportApiVersions;
-        }
+        public ReportApiVersionsAttribute( IReportApiVersions reportApiVersions ) => reporter = reportApiVersions;
 
         /// <summary>
         /// Reports the discovered service API versions for the given context before an action has executed.
@@ -39,6 +37,11 @@
         /// streaming to the client.</remarks>
         public override void OnActionExecuting( ActionExecutingContext context )
         {
+            if ( context == null )
+            {
+                throw new ArgumentNullException( nameof( context ) );
+            }
+
             var response = context.HttpContext.Response;
 
             if ( response == null )
@@ -46,12 +49,19 @@
                 return;
             }
 
-            var model = context.ActionDescriptor.GetProperty<ApiVersionModel>();
+            var model = context.ActionDescriptor.GetApiVersionModel();
 
-            if ( model?.IsApiVersionNeutral == false )
+            if ( !model.IsApiVersionNeutral )
             {
-                reporter.Report( response.Headers, model );
+                response.OnStarting( ReportApiVersions, (response.Headers, model) );
             }
+        }
+
+        Task ReportApiVersions( object state )
+        {
+            var (headers, model) = ((IHeaderDictionary, ApiVersionModel)) state;
+            reporter.Report( headers, model );
+            return CompletedTask;
         }
     }
 }

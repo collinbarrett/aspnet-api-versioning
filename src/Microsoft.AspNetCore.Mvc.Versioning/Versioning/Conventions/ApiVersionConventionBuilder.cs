@@ -2,6 +2,7 @@
 {
     using Microsoft.AspNetCore.Mvc.ApplicationModels;
     using System;
+    using System.Linq;
     using System.Reflection;
 
     /// <content>
@@ -19,10 +20,34 @@
         /// <paramref name="controllerModel">controller model</paramref>; otherwise, false.</returns>
         public virtual bool ApplyTo( ControllerModel controllerModel )
         {
-            Arg.NotNull( controllerModel, nameof( controllerModel ) );
+            if ( controllerModel == null )
+            {
+                throw new ArgumentNullException( nameof( controllerModel ) );
+            }
+
             return InternalApplyTo( controllerModel );
         }
 
         static TypeInfo GetKey( Type type ) => type.GetTypeInfo();
+
+        static bool HasDecoratedActions( ControllerModel controllerModel )
+        {
+            foreach ( var action in controllerModel.Actions )
+            {
+                var attributes = action.Attributes;
+
+                if ( attributes.OfType<IApiVersionNeutral>().Any() )
+                {
+                    return true;
+                }
+
+                if ( attributes.OfType<IApiVersionProvider>().Any() )
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 }

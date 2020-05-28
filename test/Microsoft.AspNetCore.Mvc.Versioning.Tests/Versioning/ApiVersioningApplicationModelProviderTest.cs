@@ -3,6 +3,7 @@
     using ApplicationModels;
     using FluentAssertions;
     using Microsoft.Extensions.Options;
+    using System;
     using System.Linq;
     using System.Reflection;
     using Xunit;
@@ -19,6 +20,7 @@
             var type = typeof( object );
             var attributes = new object[]
             {
+                new ApiControllerAttribute(),
                 new ApiVersionAttribute( "1.0" ),
                 new ApiVersionAttribute( "2.0" ),
                 new ApiVersionAttribute( "3.0" ),
@@ -27,11 +29,12 @@
             var actionMethod = type.GetRuntimeMethod( nameof( object.ToString ), EmptyTypes );
             var controller = new ControllerModel( type.GetTypeInfo(), attributes )
             {
-                Actions = { new ActionModel( actionMethod, new object[0] ) }
+                Actions = { new ActionModel( actionMethod, Array.Empty<object>() ) }
             };
-            var options = Options.Create( new ApiVersioningOptions() );
+            var options = Options.Create( new ApiVersioningOptions() { UseApiBehavior = true } );
+            var filter = new DefaultApiControllerFilter( Array.Empty<IApiControllerSpecification>() );
             var context = new ApplicationModelProviderContext( new[] { controller.ControllerType } );
-            var provider = new ApiVersioningApplicationModelProvider( options );
+            var provider = new ApiVersioningApplicationModelProvider( options, filter );
 
             context.Result.Controllers.Add( controller );
 
@@ -39,20 +42,11 @@
             provider.OnProvidersExecuted( context );
 
             // assert
-            controller.GetProperty<ApiVersionModel>().Should().BeEquivalentTo(
-                new
-                {
-                    IsApiVersionNeutral = false,
-                    DeclaredApiVersions = deprecated.Union( supported ).ToArray(),
-                    ImplementedApiVersions = deprecated.Union( supported ).ToArray(),
-                    SupportedApiVersions = supported,
-                    DeprecatedApiVersions = deprecated
-                } );
             controller.Actions.Single().GetProperty<ApiVersionModel>().Should().BeEquivalentTo(
                 new
                 {
                     IsApiVersionNeutral = false,
-                    DeclaredApiVersions = new ApiVersion[0],
+                    DeclaredApiVersions = Array.Empty<ApiVersion>(),
                     ImplementedApiVersions = deprecated.Union( supported ).ToArray(),
                     SupportedApiVersions = supported,
                     DeprecatedApiVersions = deprecated
@@ -71,9 +65,10 @@
             {
                 Actions = { new ActionModel( actionMethod, new object[0] ) }
             };
-            var options = Options.Create( new ApiVersioningOptions() );
+            var options = Options.Create( new ApiVersioningOptions() { UseApiBehavior = false } );
+            var filter = new DefaultApiControllerFilter( Array.Empty<IApiControllerSpecification>() );
             var context = new ApplicationModelProviderContext( new[] { controller.ControllerType } );
-            var provider = new ApiVersioningApplicationModelProvider( options );
+            var provider = new ApiVersioningApplicationModelProvider( options, filter );
 
             context.Result.Controllers.Add( controller );
 
@@ -81,7 +76,6 @@
             provider.OnProvidersExecuted( context );
 
             // assert
-            controller.GetProperty<ApiVersionModel>().Should().BeSameAs( model );
             controller.Actions.Single().GetProperty<ApiVersionModel>().Should().BeSameAs( model );
         }
 
@@ -96,9 +90,10 @@
             {
                 Actions = { new ActionModel( actionMethod, new object[0] ) }
             };
-            var options = Options.Create( new ApiVersioningOptions() );
+            var options = Options.Create( new ApiVersioningOptions() { UseApiBehavior = false } );
+            var filter = new DefaultApiControllerFilter( Array.Empty<IApiControllerSpecification>() );
             var context = new ApplicationModelProviderContext( new[] { controller.ControllerType } );
-            var provider = new ApiVersioningApplicationModelProvider( options );
+            var provider = new ApiVersioningApplicationModelProvider( options, filter );
 
             context.Result.Controllers.Add( controller );
 
@@ -106,15 +101,6 @@
             provider.OnProvidersExecuted( context );
 
             // assert
-            controller.GetProperty<ApiVersionModel>().Should().BeEquivalentTo(
-                new
-                {
-                    IsApiVersionNeutral = false,
-                    DeclaredApiVersions = new[] { new ApiVersion( 1, 0 ) },
-                    ImplementedApiVersions = new[] { new ApiVersion( 1, 0 ) },
-                    SupportedApiVersions = new[] { new ApiVersion( 1, 0 ) },
-                    DeprecatedApiVersions = new ApiVersion[0],
-                } );
             controller.Actions.Single().GetProperty<ApiVersionModel>().Should().BeEquivalentTo(
                 new
                 {
@@ -138,9 +124,10 @@
             {
                 Actions = { new ActionModel( actionMethod, new object[0] ) }
             };
-            var options = Options.Create( new ApiVersioningOptions() { DefaultApiVersion = v1 } );
+            var options = Options.Create( new ApiVersioningOptions() { DefaultApiVersion = v1, UseApiBehavior = false } );
+            var filter = new DefaultApiControllerFilter( Array.Empty<IApiControllerSpecification>() );
             var context = new ApplicationModelProviderContext( new[] { controller.ControllerType } );
-            var provider = new ApiVersioningApplicationModelProvider( options );
+            var provider = new ApiVersioningApplicationModelProvider( options, filter );
 
             context.Result.Controllers.Add( controller );
 
@@ -148,7 +135,6 @@
             provider.OnProvidersExecuted( context );
 
             // assert
-            controller.GetProperty<ApiVersionModel>().ImplementedApiVersions.Should().NotContain( v1 );
             controller.Actions.Single().GetProperty<ApiVersionModel>().ImplementedApiVersions.Should().NotContain( v1 );
         }
 
@@ -161,8 +147,8 @@
             var type = typeof( object );
             var attributes = new object[]
             {
-                new ApiVersionAttribute( "1.0" ),
                 new ApiControllerAttribute(),
+                new ApiVersionAttribute( "1.0" ),
             };
             var actionMethod = type.GetRuntimeMethod( nameof( object.ToString ), EmptyTypes );
             var apiController = new ControllerModel( type.GetTypeInfo(), attributes )
@@ -176,8 +162,9 @@
             var controllers = new[] { apiController, uiController };
             var controllerTypes = new[] { apiController.ControllerType, uiController.ControllerType };
             var options = Options.Create( new ApiVersioningOptions() { UseApiBehavior = true } );
+            var filter = new DefaultApiControllerFilter( new IApiControllerSpecification[] { new ApiBehaviorSpecification() } );
             var context = new ApplicationModelProviderContext( controllerTypes );
-            var provider = new ApiVersioningApplicationModelProvider( options );
+            var provider = new ApiVersioningApplicationModelProvider( options, filter );
 
             context.Result.Controllers.Add( apiController );
             context.Result.Controllers.Add( uiController );
@@ -186,11 +173,11 @@
             provider.OnProvidersExecuted( context );
 
             // assert
-            apiController.GetProperty<ApiVersionModel>().Should().BeEquivalentTo(
+            apiController.Actions.Single().GetProperty<ApiVersionModel>().Should().BeEquivalentTo(
                 new
                 {
                     IsApiVersionNeutral = false,
-                    DeclaredApiVersions = supported,
+                    DeclaredApiVersions = Array.Empty<ApiVersion>(),
                     ImplementedApiVersions = supported,
                     SupportedApiVersions = supported,
                     DeprecatedApiVersions = deprecated,

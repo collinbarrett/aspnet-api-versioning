@@ -10,16 +10,16 @@ namespace Microsoft.AspNetCore.Mvc
     using Microsoft.AspNetCore.Mvc.Versioning;
 #endif
     using System;
-    using System.Diagnostics.CodeAnalysis;
     using static System.AttributeTargets;
 
     /// <summary>
     /// Represents the metadata that describes the <see cref="ApiVersion">API version</see>-specific implementation of a service.
     /// </summary>
+#if !WEBAPI
+    [CLSCompliant( false )]
+#endif
     [AttributeUsage( Method, AllowMultiple = true, Inherited = false )]
-    [SuppressMessage( "Microsoft.Design", "CA1019:DefineAccessorsForAttributeArguments", Justification = "An accessor property is provided, but the values are typed; not strings." )]
-    [SuppressMessage( "Microsoft.Performance", "CA1813:AvoidUnsealedAttributes", Justification = "Allows extensibility." )]
-    public partial class MapToApiVersionAttribute : ApiVersionsBaseAttribute, IApiVersionProvider
+    public class MapToApiVersionAttribute : ApiVersionsBaseAttribute, IApiVersionProvider
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="MapToApiVersionAttribute"/> class.
@@ -34,9 +34,7 @@ namespace Microsoft.AspNetCore.Mvc
         public MapToApiVersionAttribute( string version ) : base( version ) { }
 
 #pragma warning disable CA1033 // Interface methods should be callable by child types
-        bool IApiVersionProvider.AdvertiseOnly => false;
-
-        bool IApiVersionProvider.Deprecated => false;
+        ApiVersionProviderOptions IApiVersionProvider.Options => ApiVersionProviderOptions.Mapped;
 #pragma warning restore CA1033 // Interface methods should be callable by child types
     }
 }

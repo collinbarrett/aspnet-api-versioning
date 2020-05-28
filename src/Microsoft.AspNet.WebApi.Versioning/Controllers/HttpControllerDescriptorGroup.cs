@@ -4,7 +4,6 @@
     using System.Collections;
     using System.Collections.Generic;
     using System.Collections.ObjectModel;
-    using System.Diagnostics.Contracts;
     using System.Linq;
     using System.Net.Http;
     using System.Web.Http;
@@ -18,24 +17,14 @@
     public class HttpControllerDescriptorGroup : HttpControllerDescriptor, IReadOnlyList<HttpControllerDescriptor>
 #pragma warning restore CA1710 // Identifiers should have correct suffix
     {
-        readonly HttpControllerDescriptor firstDescriptor;
         readonly IReadOnlyList<HttpControllerDescriptor> descriptors;
-        readonly IReadOnlyDictionary<ApiVersion, HttpControllerDescriptor> controllerMapping;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HttpControllerDescriptorGroup"/> class.
         /// </summary>
         /// <param name="controllerDescriptors">An <see cref="Array">array</see> of
         /// <see cref="HttpControllerDescriptor">HTTP controller descriptors</see>.</param>
-        public HttpControllerDescriptorGroup( params HttpControllerDescriptor[] controllerDescriptors )
-        {
-            Arg.NotNull( controllerDescriptors, nameof( controllerDescriptors ) );
-            Arg.InRange( controllerDescriptors.Length, 1, nameof( controllerDescriptors ) );
-
-            firstDescriptor = controllerDescriptors[0];
-            descriptors = controllerDescriptors;
-            controllerMapping = MapApiVersionsToControllerDescriptors( descriptors );
-        }
+        public HttpControllerDescriptorGroup( params HttpControllerDescriptor[] controllerDescriptors ) => descriptors = controllerDescriptors;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HttpControllerDescriptorGroup"/> class.
@@ -45,32 +34,14 @@
         /// <param name="controllerDescriptors">An <see cref="Array">array</see> of
         /// <see cref="HttpControllerDescriptor">HTTP controller descriptors</see>.</param>
         public HttpControllerDescriptorGroup( HttpConfiguration configuration, string controllerName, params HttpControllerDescriptor[] controllerDescriptors )
-            : base( configuration, controllerName, controllerDescriptors[0].ControllerType )
-        {
-            Arg.NotNull( configuration, nameof( configuration ) );
-            Arg.NotNullOrEmpty( controllerName, nameof( controllerName ) );
-            Arg.NotNull( controllerDescriptors, nameof( controllerDescriptors ) );
-            Arg.InRange( controllerDescriptors.Length, 1, nameof( controllerDescriptors ) );
-
-            firstDescriptor = controllerDescriptors[0];
-            descriptors = controllerDescriptors;
-            controllerMapping = MapApiVersionsToControllerDescriptors( descriptors );
-        }
+            : base( configuration, controllerName, controllerDescriptors[0].ControllerType ) => descriptors = controllerDescriptors;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HttpControllerDescriptorGroup"/> class.
         /// </summary>
         /// <param name="controllerDescriptors">A <see cref="IReadOnlyList{T}">read-only list</see> of
         /// <see cref="HttpControllerDescriptor">HTTP controller descriptors</see>.</param>
-        public HttpControllerDescriptorGroup( IReadOnlyList<HttpControllerDescriptor> controllerDescriptors )
-        {
-            Arg.NotNull( controllerDescriptors, nameof( controllerDescriptors ) );
-            Arg.InRange( controllerDescriptors.Count, 1, nameof( controllerDescriptors ) );
-
-            firstDescriptor = controllerDescriptors[0];
-            descriptors = controllerDescriptors;
-            controllerMapping = MapApiVersionsToControllerDescriptors( descriptors );
-        }
+        public HttpControllerDescriptorGroup( IReadOnlyList<HttpControllerDescriptor> controllerDescriptors ) => descriptors = controllerDescriptors;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HttpControllerDescriptorGroup"/> class.
@@ -80,17 +51,7 @@
         /// <param name="controllerDescriptors">A <see cref="IReadOnlyList{T}">read-only list</see> of
         /// <see cref="HttpControllerDescriptor">HTTP controller descriptors</see>.</param>
         public HttpControllerDescriptorGroup( HttpConfiguration configuration, string controllerName, IReadOnlyList<HttpControllerDescriptor> controllerDescriptors )
-            : base( configuration, controllerName, controllerDescriptors[0].ControllerType )
-        {
-            Arg.NotNull( configuration, nameof( configuration ) );
-            Arg.NotNullOrEmpty( controllerName, nameof( controllerName ) );
-            Arg.NotNull( controllerDescriptors, nameof( controllerDescriptors ) );
-            Arg.InRange( controllerDescriptors.Count, 1, nameof( controllerDescriptors ) );
-
-            firstDescriptor = controllerDescriptors[0];
-            descriptors = controllerDescriptors;
-            controllerMapping = MapApiVersionsToControllerDescriptors( descriptors );
-        }
+            : base( configuration, controllerName, controllerDescriptors?[0].ControllerType ) => descriptors = controllerDescriptors ?? throw new ArgumentNullException( nameof( controllerDescriptors ) );
 
         /// <summary>
         /// Creates and returns a controller for the specified request.
@@ -104,21 +65,8 @@
         /// the <see cref="IHttpController">controller</see> is created using the first item in the group.</remarks>
         public override IHttpController CreateController( HttpRequestMessage request )
         {
-            Arg.NotNull( request, nameof( request ) );
-
-            if ( Count == 1 )
-            {
-                return firstDescriptor.CreateController( request );
-            }
-
-            var version = request.GetRequestedApiVersion();
-
-            if ( version != null && controllerMapping.TryGetValue( version, out var descriptor ) )
-            {
-                return descriptor.CreateController( request );
-            }
-
-            return firstDescriptor.CreateController( request );
+            var descriptor = request.ApiVersionProperties().SelectedController!;
+            return descriptor.CreateController( request );
         }
 
         /// <summary>
@@ -180,30 +128,5 @@
         /// </summary>
         /// <value>The total number of items in the group.</value>
         public int Count => descriptors.Count;
-
-        static Dictionary<ApiVersion, HttpControllerDescriptor> MapApiVersionsToControllerDescriptors( IReadOnlyList<HttpControllerDescriptor> descriptors )
-        {
-            Contract.Requires( descriptors != null );
-
-            if ( descriptors.Count < 2 )
-            {
-                return default;
-            }
-
-            var mapping = new Dictionary<ApiVersion, HttpControllerDescriptor>();
-
-            for ( var i = 0; i < descriptors.Count; i++ )
-            {
-                var descriptor = descriptors[i];
-                var apiVersions = descriptor.GetDeclaredApiVersions();
-
-                for ( var j = 0; j < apiVersions.Count; j++ )
-                {
-                    mapping[apiVersions[j]] = descriptor;
-                }
-            }
-
-            return mapping;
-        }
     }
 }

@@ -4,14 +4,14 @@
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.AspNetCore.Mvc.Conventions;
     using Microsoft.AspNetCore.Mvc.Conventions.Controllers;
-    using System.Collections.Generic;
     using System.Linq;
     using System.Net.Http;
     using System.Threading.Tasks;
     using Xunit;
     using static System.Net.HttpStatusCode;
 
-    public class when_using_a_url_segment : ConventionsAcceptanceTest
+    [Collection( nameof( ConventionsCollection ) )]
+    public class when_using_a_url_segment : AcceptanceTest
     {
         [Theory]
         [InlineData( "api/v1/helloworld", nameof( HelloWorldController ), "1" )]
@@ -65,5 +65,13 @@
             response.StatusCode.Should().Be( BadRequest );
             content.Error.Code.Should().Be( "UnsupportedApiVersion" );
         }
+
+        public when_using_a_url_segment( ConventionsFixture fixture ) : base( fixture ) { }
+    }
+
+    [Collection( nameof( ConventionsEndpointCollection ) )]
+    public class when_using_a_url_segment_ : when_using_a_url_segment
+    {
+        public when_using_a_url_segment_( ConventionsEndpointFixture fixture ) : base( fixture ) { }
     }
 }

@@ -17,10 +17,12 @@
         public void Apply( ODataModelBuilder builder, ApiVersion apiVersion )
         {
             var order = builder.EntitySet<Order>( "Orders" ).EntityType.HasKey( o => o.Id );
+            var lineItem = builder.EntityType<LineItem>().HasKey( li => li.Number );
 
             if ( apiVersion < ApiVersions.V2 )
             {
                 order.Ignore( o => o.EffectiveDate );
+                lineItem.Ignore( li => li.Fulfilled );
             }
 
             if ( apiVersion < ApiVersions.V3 )
@@ -30,12 +32,12 @@
 
             if ( apiVersion >= ApiVersions.V1 )
             {
-                // order.Collection.Function( "MostExpensive" ).ReturnsFromEntitySet<Order>( "Orders" );
+                order.Collection.Function( "MostExpensive" ).ReturnsFromEntitySet<Order>( "Orders" );
             }
 
             if ( apiVersion >= ApiVersions.V2 )
             {
-                //order.Action( "Rate" ).Parameter<int>( "rating" );
+                order.Action( "Rate" ).Parameter<int>( "rating" );
             }
         }
     }

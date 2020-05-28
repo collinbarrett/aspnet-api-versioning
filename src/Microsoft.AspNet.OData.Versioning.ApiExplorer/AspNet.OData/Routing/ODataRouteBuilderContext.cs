@@ -8,11 +8,9 @@
     using Microsoft.Web.Http.Description;
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Web.Http;
     using System.Web.Http.Controllers;
     using System.Web.Http.Description;
-    using static Microsoft.OData.ODataUrlKeyDelimiter;
     using static System.Linq.Enumerable;
 
     partial class ODataRouteBuilderContext
@@ -23,28 +21,19 @@
             ODataRoute route,
             HttpActionDescriptor actionDescriptor,
             IList<ApiParameterDescription> parameterDescriptions,
-            ModelTypeBuilder modelTypeBuilder,
+            IModelTypeBuilder modelTypeBuilder,
             ODataApiExplorerOptions options )
         {
-            Contract.Requires( configuration != null );
-            Contract.Requires( apiVersion != null );
-            Contract.Requires( route != null );
-            Contract.Requires( actionDescriptor != null );
-            Contract.Requires( parameterDescriptions != null );
-            Contract.Requires( modelTypeBuilder != null );
-            Contract.Requires( options != null );
-
             ApiVersion = apiVersion;
-            serviceProvider = configuration.GetODataRootContainer( route );
-            EdmModel = serviceProvider.GetRequiredService<IEdmModel>();
-            Assemblies = configuration.Services.GetAssembliesResolver().GetAssemblies();
+            Services = configuration.GetODataRootContainer( route );
+            EdmModel = Services.GetRequiredService<IEdmModel>();
             routeAttribute = actionDescriptor.GetCustomAttributes<ODataRouteAttribute>().FirstOrDefault();
             RouteTemplate = routeAttribute?.PathTemplate;
             Route = route;
             ActionDescriptor = actionDescriptor;
             ParameterDescriptions = parameterDescriptions;
             Options = options;
-            UrlKeyDelimiter = configuration.GetUrlKeyDelimiter() ?? Parentheses;
+            UrlKeyDelimiter = UrlKeyDelimiterOrDefault( configuration.GetUrlKeyDelimiter() ?? Services.GetService<IODataPathHandler>()?.UrlKeyDelimiter );
 
             var container = EdmModel.EntityContainer;
 
@@ -61,16 +50,12 @@
 
             if ( Operation?.IsAction() == true )
             {
-                ConvertODataActionParametersToTypedModel( modelTypeBuilder, (IEdmAction) Operation );
+                ConvertODataActionParametersToTypedModel( modelTypeBuilder, (IEdmAction) Operation, actionDescriptor.ControllerDescriptor.ControllerName );
             }
         }
 
-        void ConvertODataActionParametersToTypedModel( ModelTypeBuilder modelTypeBuilder, IEdmAction action )
+        void ConvertODataActionParametersToTypedModel( IModelTypeBuilder modelTypeBuilder, IEdmAction action, string controllerName )
         {
-            Contract.Requires( modelTypeBuilder != null );
-            Contract.Requires( action != null );
-
-            var actionParameters = typeof( ODataActionParameters );
             var apiVersion = new Lazy<ApiVersion>( () => EdmModel.GetAnnotationValue<ApiVersionAnnotation>( EdmModel ).ApiVersion );
 
             for ( var i = 0; i < ParameterDescriptions.Count; i++ )
@@ -78,9 +63,9 @@
                 var description = ParameterDescriptions[i];
                 var parameter = description.ParameterDescriptor;
 
-                if ( actionParameters.IsAssignableFrom( parameter.ParameterType ) )
+                if ( parameter != null && parameter.ParameterType.IsODataActionParameters() )
                 {
-                    description.ParameterDescriptor = new ODataModelBoundParameterDescriptor( parameter, modelTypeBuilder.NewActionParameters( action, apiVersion.Value ) );
+                    description.ParameterDescriptor = new ODataModelBoundParameterDescriptor( parameter, modelTypeBuilder.NewActionParameters( Services, action, apiVersion.Value, controllerName ) );
                     break;
                 }
             }

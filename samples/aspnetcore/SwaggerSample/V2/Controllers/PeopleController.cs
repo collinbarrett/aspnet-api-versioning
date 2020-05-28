@@ -8,18 +8,18 @@
     /// <summary>
     /// Represents a RESTful people service.
     /// </summary>
+    [ApiController]
     [ApiVersion( "2.0" )]
-    [Route( "api/v{api-version:apiVersion}/[controller]" )]
-    public class PeopleController : Controller
+    [Route( "api/v{version:apiVersion}/[controller]" )]
+    public class PeopleController : ControllerBase
     {
-        const string ByIdRouteName = "GetPersonById" + nameof( V2 );
-
         /// <summary>
         /// Gets all people.
         /// </summary>
         /// <returns>All available people.</returns>
         /// <response code="200">The successfully retrieved people.</response>
         [HttpGet]
+        [Produces( "application/json" )]
         [ProducesResponseType( typeof( IEnumerable<Person> ), 200 )]
         public IActionResult Get()
         {
@@ -58,7 +58,8 @@
         /// <returns>The requested person.</returns>
         /// <response code="200">The person was successfully retrieved.</response>
         /// <response code="404">The person does not exist.</response>
-        [HttpGet( "{id:int}", Name = ByIdRouteName )]
+        [HttpGet( "{id:int}" )]
+        [Produces( "application/json" )]
         [ProducesResponseType( typeof( Person ), 200 )]
         [ProducesResponseType( 404 )]
         public IActionResult Get( int id ) =>

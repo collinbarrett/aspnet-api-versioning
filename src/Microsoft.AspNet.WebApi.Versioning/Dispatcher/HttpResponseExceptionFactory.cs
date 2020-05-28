@@ -1,15 +1,13 @@
 ﻿namespace Microsoft.Web.Http.Dispatcher
 {
+    using Microsoft.Web.Http.Versioning;
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics.CodeAnalysis;
-    using System.Diagnostics.Contracts;
     using System.Linq;
     using System.Net.Http;
     using System.Web.Http;
     using System.Web.Http.Dispatcher;
     using System.Web.Http.Tracing;
-    using Microsoft.Web.Http.Versioning;
     using static ApiVersion;
     using static System.Net.HttpStatusCode;
     using static System.String;
@@ -24,9 +22,6 @@
 
         internal HttpResponseExceptionFactory( HttpRequestMessage request, Lazy<ApiVersionModel> allApiVersions )
         {
-            Contract.Requires( request != null );
-            Contract.Requires( allApiVersions != null );
-
             this.request = request;
             this.allApiVersions = allApiVersions;
         }
@@ -51,31 +46,28 @@
             }
         }
 
-        [SuppressMessage( "Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Created exception cannot be disposed. Handled by the caller." )]
-        internal HttpResponseException NewNotFoundOrBadRequestException( ControllerSelectionResult conventionRouteResult, ControllerSelectionResult directRouteResult ) =>
+        internal HttpResponseException NewNotFoundOrBadRequestException( ControllerSelectionResult conventionRouteResult, ControllerSelectionResult? directRouteResult ) =>
             CreateBadRequest( conventionRouteResult, directRouteResult ) ?? CreateNotFound( conventionRouteResult );
 
-        [SuppressMessage( "Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Created exception cannot be disposed. Handled by the caller." )]
-        internal HttpResponseMessage CreateBadRequestResponse( ApiVersion requestedVersion )
+        internal HttpResponseMessage? CreateBadRequestResponse( ApiVersion? requestedVersion )
         {
             var response = requestedVersion == null ?
                            CreateBadRequestForUnspecifiedApiVersionOrInvalidApiVersion( versionNeutral: false ) :
                            CreateBadRequestForUnsupportedApiVersion( requestedVersion );
 
-            ApiVersionReporter.Report( response.Headers, allApiVersions );
+            if ( response != null )
+            {
+                ApiVersionReporter.Report( response.Headers, allApiVersions );
+            }
 
             return response;
         }
 
-        [SuppressMessage( "Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Created exception cannot be disposed. Handled by the caller." )]
-        internal HttpResponseException CreateBadRequest( ApiVersion requestedVersion ) => new HttpResponseException( CreateBadRequestResponse( requestedVersion ) );
+        internal HttpResponseException CreateBadRequest( ApiVersion? requestedVersion ) => new HttpResponseException( CreateBadRequestResponse( requestedVersion ) );
 
-        [SuppressMessage( "Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Created exception cannot be disposed. Handled by the caller." )]
-        HttpResponseException CreateBadRequest( ControllerSelectionResult conventionRouteResult, ControllerSelectionResult directRouteResult )
+        HttpResponseException? CreateBadRequest( ControllerSelectionResult conventionRouteResult, ControllerSelectionResult? directRouteResult )
         {
-            Contract.Requires( conventionRouteResult != null );
-
-            var requestedVersion = default( ApiVersion );
+            ApiVersion? requestedVersion;
 
             if ( conventionRouteResult.CouldMatchVersion )
             {
@@ -93,11 +85,10 @@
             return CreateBadRequest( requestedVersion );
         }
 
-        [SuppressMessage( "Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Created exception cannot be disposed. Handled by the caller." )]
-        HttpResponseMessage CreateBadRequestForUnspecifiedApiVersionOrInvalidApiVersion( bool versionNeutral )
+        HttpResponseMessage? CreateBadRequestForUnspecifiedApiVersionOrInvalidApiVersion( bool versionNeutral )
         {
             var requestedVersion = request.ApiVersionProperties().RawRequestedApiVersion;
-            var message = default( string );
+            string message;
 
             if ( IsNullOrEmpty( requestedVersion ) )
             {
@@ -110,7 +101,7 @@
                 TraceWriter.Info( request, ControllerSelectorCategory, message );
                 return Options.ErrorResponses.BadRequest( request, ApiVersionUnspecified, message );
             }
-            else if ( TryParse( requestedVersion, out var parsedVersion ) )
+            else if ( TryParse( requestedVersion, out _ ) )
             {
                 return null;
             }
@@ -123,25 +114,19 @@
             return Options.ErrorResponses.BadRequest( request, InvalidApiVersion, message, messageDetail );
         }
 
-        [SuppressMessage( "Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Created exception cannot be disposed. Handled by the caller." )]
         HttpResponseMessage CreateBadRequestForUnsupportedApiVersion( ApiVersion requestedVersion )
         {
-            Contract.Requires( requestedVersion != null );
-            Contract.Ensures( Contract.Result<HttpResponseMessage>() != null );
-
-            var message = SR.VersionedResourceNotSupported.FormatDefault( request.RequestUri, requestedVersion );
-            var messageDetail = SR.VersionedControllerNameNotFound.FormatDefault( request.RequestUri, requestedVersion );
+            var safeUrl = request.RequestUri.SafeFullPath();
+            var message = SR.VersionedResourceNotSupported.FormatDefault( safeUrl, requestedVersion );
+            var messageDetail = SR.VersionedControllerNameNotFound.FormatDefault( safeUrl, requestedVersion );
 
             TraceWriter.Info( request, ControllerSelectorCategory, message );
 
             return Options.ErrorResponses.BadRequest( request, UnsupportedApiVersion, message, messageDetail );
         }
 
-        [SuppressMessage( "Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Created exception cannot be disposed. Handled by the caller." )]
         internal HttpResponseMessage CreateMethodNotAllowedResponse( bool versionNeutral, IEnumerable<HttpMethod> allowedMethods )
         {
-            Contract.Requires( allowedMethods != null );
-
             var response = CreateBadRequestForUnspecifiedApiVersionOrInvalidApiVersion( versionNeutral || Options.AssumeDefaultVersionWhenUnspecified );
 
             if ( response != null )
@@ -153,7 +138,9 @@
             var requestedMethod = request.Method;
             var version = request.GetRequestedApiVersion()?.ToString() ?? "(null)";
             var message = SR.VersionedMethodNotSupported.FormatDefault( version, requestedMethod );
-            var messageDetail = SR.VersionedActionNameNotFound.FormatDefault( request.RequestUri, requestedMethod, version );
+            var safeUrl = request.RequestUri.SafeFullPath();
+
+            var messageDetail = SR.VersionedActionNameNotFound.FormatDefault( safeUrl, requestedMethod, version );
 
             TraceWriter.Info( request, ControllerSelectorCategory, message );
             response = Options.ErrorResponses.MethodNotAllowed( request, UnsupportedApiVersion, message, messageDetail );
@@ -176,21 +163,18 @@
             return response;
         }
 
-        [SuppressMessage( "Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Created exception cannot be disposed. Handled by the caller." )]
         internal HttpResponseException NewMethodNotAllowedException( bool versionNeutral, IEnumerable<HttpMethod> allowedMethods ) =>
             new HttpResponseException( CreateMethodNotAllowedResponse( versionNeutral, allowedMethods ) );
 
-        [SuppressMessage( "Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Created exception cannot be disposed. Handled by the caller." )]
         HttpResponseException CreateNotFound( ControllerSelectionResult conventionRouteResult )
         {
-            Contract.Requires( conventionRouteResult != null );
-
-            var message = SR.ResourceNotFound.FormatDefault( request.RequestUri );
-            var messageDetail = default( string );
+            var safeUrl = request.RequestUri.SafeFullPath();
+            var message = SR.ResourceNotFound.FormatDefault( safeUrl );
+            string messageDetail;
 
             if ( IsNullOrEmpty( conventionRouteResult.ControllerName ) )
             {
-                messageDetail = SR.ControllerNameNotFound.FormatDefault( request.RequestUri );
+                messageDetail = SR.ControllerNameNotFound.FormatDefault( safeUrl );
             }
             else
             {
@@ -199,7 +183,9 @@
 
             TraceWriter.Info( request, ControllerSelectorCategory, message );
 
+#pragma warning disable CA2000 // Dispose objects before losing scope
             return new HttpResponseException( request.CreateErrorResponse( NotFound, message, messageDetail ) );
+#pragma warning restore CA2000 // Dispose objects before losing scope
         }
     }
 }

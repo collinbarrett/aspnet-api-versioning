@@ -10,10 +10,7 @@ namespace Microsoft.AspNetCore.Mvc.Versioning.Conventions
     /// <summary>
     /// Defines the behavior of a convention builder for a controller action.
     /// </summary>
-#if !WEBAPI
-    [CLSCompliant( false )]
-#endif
-    public interface IActionConventionBuilder
+    public partial interface IActionConventionBuilder : IMapToApiVersionConventionBuilder
     {
         /// <summary>
         /// Gets the type of controller the convention builder is for.
@@ -26,7 +23,7 @@ namespace Microsoft.AspNetCore.Mvc.Versioning.Conventions
         /// </summary>
         /// <param name="actionMethod">The controller action <see cref="MethodInfo">method</see>
         /// to get or create a convention for.</param>
-        /// <returns>A new or existing <see cref="ActionApiVersionConventionBuilder"/>.</returns>
-        ActionApiVersionConventionBuilder Action( MethodInfo actionMethod );
+        /// <returns>A new or existing <see cref="IActionConventionBuilder"/>.</returns>
+        IActionConventionBuilder Action( MethodInfo actionMethod );
     }
 }

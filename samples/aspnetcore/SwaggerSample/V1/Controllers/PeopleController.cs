@@ -7,10 +7,11 @@
     /// <summary>
     /// Represents a RESTful people service.
     /// </summary>
+    [ApiController]
     [ApiVersion( "1.0" )]
     [ApiVersion( "0.9", Deprecated = true )]
-    [Route( "api/v{api-version:apiVersion}/[controller]" )]
-    public class PeopleController : Controller
+    [Route( "api/v{version:apiVersion}/[controller]" )]
+    public class PeopleController : ControllerBase
     {
         /// <summary>
         /// Gets a single person.
@@ -20,6 +21,7 @@
         /// <response code="200">The person was successfully retrieved.</response>
         /// <response code="404">The person does not exist.</response>
         [HttpGet( "{id:int}" )]
+        [Produces( "application/json" )]
         [ProducesResponseType( typeof( Person ), 200 )]
         [ProducesResponseType( 404 )]
         public IActionResult Get( int id ) =>

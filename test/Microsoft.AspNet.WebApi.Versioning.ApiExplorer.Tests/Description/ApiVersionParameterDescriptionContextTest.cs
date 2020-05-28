@@ -1,13 +1,18 @@
 ﻿namespace Microsoft.Web.Http.Description
 {
     using FluentAssertions;
+    using Microsoft.Web.Http.Routing;
+    using Microsoft.Web.Http.Versioning;
     using Moq;
+    using System.Collections.ObjectModel;
     using System.Linq;
     using System.Net.Http.Formatting;
     using System.Net.Http.Headers;
     using System.Web.Http;
     using System.Web.Http.Controllers;
     using System.Web.Http.Description;
+    using System.Web.Http.Filters;
+    using System.Web.Http.Routing;
     using Xunit;
     using static Microsoft.Web.Http.Versioning.ApiVersionParameterLocation;
     using static System.Web.Http.Description.ApiParameterSource;
@@ -19,7 +24,7 @@
         {
             // arrange
             var configuration = new HttpConfiguration();
-            var action = new Mock<HttpActionDescriptor>() { CallBase = true }.Object;
+            var action = NewActionDescriptor();
             var description = new ApiDescription() { ActionDescriptor = action };
             var version = new ApiVersion( 1, 0 );
             var options = new ApiExplorerOptions( configuration );
@@ -54,7 +59,7 @@
         {
             // arrange
             var configuration = new HttpConfiguration();
-            var action = new Mock<HttpActionDescriptor>() { CallBase = true }.Object;
+            var action = NewActionDescriptor();
             var description = new ApiDescription() { ActionDescriptor = action };
             var version = new ApiVersion( 1, 0 );
             var options = new ApiExplorerOptions( configuration );
@@ -89,8 +94,13 @@
         {
             // arrange
             var configuration = new HttpConfiguration();
-            var action = new Mock<HttpActionDescriptor>() { CallBase = true }.Object;
-            var description = new ApiDescription() { ActionDescriptor = action };
+            var action = NewActionDescriptor();
+            var route = new HttpRoute() { Constraints = { ["api-version"] = new ApiVersionRouteConstraint() } };
+            var description = new ApiDescription()
+            {
+                ActionDescriptor = action,
+                Route = route,
+            };
             var version = new ApiVersion( 1, 0 );
             var options = new ApiExplorerOptions( configuration );
             var context = new ApiVersionParameterDescriptionContext( description, version, options );
@@ -125,8 +135,13 @@
         {
             // arrange
             var configuration = new HttpConfiguration();
-            var action = new Mock<HttpActionDescriptor>() { CallBase = true }.Object;
-            var description = new ApiDescription() { ActionDescriptor = action };
+            var action = NewActionDescriptor();
+            var route = new HttpRoute() { Constraints = { ["api-version"] = new ApiVersionRouteConstraint() } };
+            var description = new ApiDescription()
+            {
+                ActionDescriptor = action,
+                Route = route,
+            };
             var version = new ApiVersion( 1, 0 );
             var options = new ApiExplorerOptions( configuration );
             var context = new ApiVersionParameterDescriptionContext( description, version, options );
@@ -147,8 +162,13 @@
         {
             // arrange
             var configuration = new HttpConfiguration();
-            var action = new Mock<HttpActionDescriptor>() { CallBase = true }.Object;
-            var description = new ApiDescription() { ActionDescriptor = action };
+            var action = NewActionDescriptor();
+            var route = new HttpRoute() { Constraints = { ["api-version"] = new ApiVersionRouteConstraint() } };
+            var description = new ApiDescription()
+            {
+                ActionDescriptor = action,
+                Route = route,
+            };
             var version = new ApiVersion( 1, 0 );
             var options = new ApiExplorerOptions( configuration );
             var context = new ApiVersionParameterDescriptionContext( description, version, options );
@@ -169,7 +189,7 @@
         {
             // arrange
             var configuration = new HttpConfiguration();
-            var action = new Mock<HttpActionDescriptor>() { CallBase = true }.Object;
+            var action = NewActionDescriptor();
             var json = new JsonMediaTypeFormatter();
             var formUrlEncoded = new FormUrlEncodedMediaTypeFormatter();
 
@@ -214,7 +234,7 @@
         {
             // arrange
             var configuration = new HttpConfiguration();
-            var action = new Mock<HttpActionDescriptor>() { CallBase = true }.Object;
+            var action = NewActionDescriptor();
             var description = new ApiDescription() { ActionDescriptor = action };
             var version = new ApiVersion( 1, 0 );
             var options = new ApiExplorerOptions( configuration );
@@ -251,7 +271,7 @@
         {
             // arrange
             var configuration = new HttpConfiguration();
-            var action = new Mock<HttpActionDescriptor>() { CallBase = true }.Object;
+            var action = NewActionDescriptor();
             var description = new ApiDescription() { ActionDescriptor = action };
             var version = new ApiVersion( 1, 0 );
             var options = new ApiExplorerOptions( configuration );
@@ -266,6 +286,19 @@
             // assert
             description.ParameterDescriptions[0].ParameterDescriptor.IsOptional.Should().BeFalse();
             description.ParameterDescriptions[1].ParameterDescriptor.IsOptional.Should().BeTrue();
+        }
+
+        static HttpActionDescriptor NewActionDescriptor()
+        {
+            var action = new Mock<HttpActionDescriptor>() { CallBase = true }.Object;
+            var controller = new Mock<HttpControllerDescriptor>() { CallBase = true };
+
+            controller.Setup( c => c.GetCustomAttributes<IApiVersionProvider>( It.IsAny<bool>() ) ).Returns( new Collection<IApiVersionProvider>() );
+            controller.Setup( c => c.GetCustomAttributes<IApiVersionNeutral>( It.IsAny<bool>() ) ).Returns( new Collection<IApiVersionNeutral>() );
+            controller.Setup( c => c.GetFilters() ).Returns( new Collection<IFilter>() );
+            action.ControllerDescriptor = controller.Object;
+
+            return action;
         }
     }
 }

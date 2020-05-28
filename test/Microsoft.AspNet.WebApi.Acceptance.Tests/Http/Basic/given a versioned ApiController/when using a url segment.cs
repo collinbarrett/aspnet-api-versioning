@@ -12,7 +12,8 @@
     using Xunit;
     using static System.Net.HttpStatusCode;
 
-    public class when_using_a_url_segment : BasicAcceptanceTest
+    [Collection( nameof( BasicCollection ) )]
+    public class when_using_a_url_segment : AcceptanceTest
     {
         [Theory]
         [InlineData( "api/v1/helloworld", null )]
@@ -47,9 +48,10 @@
             var entity = default( object );
 
             // act
-            var response = await PostAsync( "api/v1/helloworld", entity ).EnsureSuccessStatusCode();
+            var response = await PostAsync( "api/v1/helloworld", entity );
 
             // assert
+            response.StatusCode.Should().Be( Created );
             response.Headers.Location.Should().Be( new Uri( "http://localhost/api/v1/helloworld/42" ) );
         }
 
@@ -67,5 +69,7 @@
             response.StatusCode.Should().Be( BadRequest );
             content.Error.Code.Should().Be( "UnsupportedApiVersion" );
         }
+
+        public when_using_a_url_segment( BasicFixture fixture ) : base( fixture ) { }
     }
 }

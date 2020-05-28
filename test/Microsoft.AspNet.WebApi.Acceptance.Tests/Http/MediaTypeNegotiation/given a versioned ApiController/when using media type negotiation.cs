@@ -13,7 +13,7 @@
     using static System.Net.Http.Headers.MediaTypeWithQualityHeaderValue;
     using static System.Net.HttpStatusCode;
 
-    public class when_using_media_type_negotiation : MediaTypeNegotiationAcceptanceTest
+    public class when_using_media_type_negotiation : AcceptanceTest, IClassFixture<MediaTypeNegotiationFixture>
     {
         [Theory]
         [InlineData( nameof( ValuesController ), "1.0" )]
@@ -23,21 +23,25 @@
             // arrange
             var example = new { controller = "", version = "" };
 
+            Client.DefaultRequestHeaders.Clear();
             Client.DefaultRequestHeaders.Accept.Add( Parse( "application/json;v=" + apiVersion ) );
 
             // act
             var response = await GetAsync( "api/values" ).EnsureSuccessStatusCode();
-            var content = await response.Content.ReadAsExampleAsync( example );
+            var body = response.Content;
+            var content = await body.ReadAsExampleAsync( example );
 
             // assert
             response.Headers.GetValues( "api-supported-versions" ).Single().Should().Be( "1.0, 2.0" );
-            content.Should().BeEquivalentTo( new { controller = controller, version = apiVersion } );
+            body.Headers.ContentType.Parameters.Single( p => p.Name == "v" ).Value.Should().Be( apiVersion );
+            content.Should().BeEquivalentTo( new { controller, version = apiVersion } );
         }
 
         [Fact]
         public async Task then_get_should_return_400_for_an_unsupported_version()
         {
             // arrange
+            Client.DefaultRequestHeaders.Clear();
             Client.DefaultRequestHeaders.Accept.Add( Parse( "application/json;v=3.0" ) );
 
             // act
@@ -59,10 +63,12 @@
 
             // act
             var response = await GetAsync( requestUrl ).EnsureSuccessStatusCode();
-            var content = await response.Content.ReadAsExampleAsync( example );
+            var body = response.Content;
+            var content = await body.ReadAsExampleAsync( example );
 
             // assert
-            content.Should().BeEquivalentTo( new { controller = controller, version = apiVersion } );
+            body.Headers.ContentType.Parameters.Single( p => p.Name == "v" ).Value.Should().Be( apiVersion );
+            content.Should().BeEquivalentTo( new { controller, version = apiVersion } );
         }
 
         [Fact]
@@ -74,10 +80,13 @@
             var content = new ObjectContent( entity.GetType(), entity, new JsonMediaTypeFormatter(), mediaType );
 
             // act
-            var response = await PostAsync( "api/helloworld", content ).EnsureSuccessStatusCode();
+            var response = await PostAsync( "api/helloworld", content );
 
             // assert
+            response.StatusCode.Should().Be( Created );
             response.Headers.Location.Should().Be( new Uri( "http://localhost/api/helloworld/42" ) );
         }
+
+        public when_using_media_type_negotiation( MediaTypeNegotiationFixture fixture ) : base( fixture ) { }
     }
 }

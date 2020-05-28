@@ -8,12 +8,11 @@
     /// <summary>
     /// Represents a RESTful service of orders.
     /// </summary>
+    [ApiController]
     [ApiVersion( "3.0" )]
     [Route( "api/[controller]" )]
-    public class OrdersController : Controller
+    public class OrdersController : ControllerBase
     {
-        const string ByIdRouteName = "GetOrderById-" + nameof( V3 );
-
         /// <summary>
         /// Retrieves all orders.
         /// </summary>
@@ -21,6 +20,7 @@
         /// <response code="200">Orders successfully retrieved.</response>
         /// <response code="400">The order is invalid.</response>
         [HttpGet]
+        [Produces( "application/json" )]
         [ProducesResponseType( typeof( IEnumerable<Order> ), 200 )]
         [ProducesResponseType( 400 )]
         public IActionResult Get()
@@ -42,7 +42,8 @@
         /// <returns>The requested order.</returns>
         /// <response code="200">The order was successfully retrieved.</response>
         /// <response code="404">The order does not exist.</response>
-        [HttpGet( "{id:int}", Name = ByIdRouteName )]
+        [HttpGet( "{id:int}" )]
+        [Produces( "application/json" )]
         [ProducesResponseType( typeof( Order ), 200 )]
         [ProducesResponseType( 400 )]
         [ProducesResponseType( 404 )]
@@ -56,18 +57,13 @@
         /// <response code="201">The order was successfully placed.</response>
         /// <response code="400">The order is invalid.</response>
         [HttpPost]
+        [Produces( "application/json" )]
         [ProducesResponseType( typeof( Order ), 201 )]
         [ProducesResponseType( 400 )]
         public IActionResult Post( [FromBody] Order order )
         {
-            if ( !ModelState.IsValid )
-            {
-                return BadRequest( ModelState );
-            }
-
             order.Id = 42;
-
-            return CreatedAtRoute( ByIdRouteName, new { id = order.Id }, order );
+            return CreatedAtAction( nameof( Get ), new { id = order.Id }, order );
         }
 
         /// <summary>

@@ -1,15 +1,13 @@
 ﻿namespace Microsoft.AspNetCore.Mvc.ApiExplorer
 {
     using Microsoft.AspNetCore.Mvc.Abstractions;
-    using Microsoft.AspNetCore.Mvc.ApplicationModels;
     using Microsoft.AspNetCore.Mvc.Controllers;
     using Microsoft.AspNetCore.Mvc.ModelBinding;
-    using Microsoft.AspNetCore.Mvc.Versioning;
     using Microsoft.Extensions.Options;
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Linq;
+    using static Microsoft.AspNetCore.Mvc.Versioning.ApiVersionMapping;
     using static System.Globalization.CultureInfo;
     using static System.Linq.Enumerable;
 
@@ -30,9 +28,6 @@
         /// <param name="options">The <see cref="IOptions{TOptions}">container</see> of configured <see cref="ApiExplorerOptions">API explorer options</see>.</param>
         public VersionedApiDescriptionProvider( IModelMetadataProvider metadataProvider, IOptions<ApiExplorerOptions> options )
         {
-            Arg.NotNull( metadataProvider, nameof( metadataProvider ) );
-            Arg.NotNull( options, nameof( options ) );
-
             MetadataProvider = metadataProvider;
             this.options = options;
             modelMetadata = new Lazy<ModelMetadata>( NewModelMetadata );
@@ -51,9 +46,9 @@
         protected ApiExplorerOptions Options => options.Value;
 
         /// <summary>
-        /// Gets the order prescendence of the current API description provider.
+        /// Gets the order precedence of the current API description provider.
         /// </summary>
-        /// <value>The order prescendence of the current API description provider. The default value is 0.</value>
+        /// <value>The order precedence of the current API description provider. The default value is 0.</value>
         public virtual int Order => 0;
 
         /// <summary>
@@ -62,30 +57,7 @@
         /// <param name="actionDescriptor">The <see cref="ActionDescriptor">action</see> to evaluate.</param>
         /// <param name="apiVersion">The <see cref="ApiVersion">API version</see> for action being explored.</param>
         /// <returns>True if the action should be explored; otherwise, false.</returns>
-        protected virtual bool ShouldExploreAction( ActionDescriptor actionDescriptor, ApiVersion apiVersion )
-        {
-            Arg.NotNull( actionDescriptor, nameof( actionDescriptor ) );
-            Arg.NotNull( apiVersion, nameof( actionDescriptor ) );
-
-            var model = actionDescriptor.GetProperty<ApiVersionModel>();
-
-            if ( model != null )
-            {
-                if ( model.IsApiVersionNeutral || model.DeclaredApiVersions.Contains( apiVersion ) )
-                {
-                    return true;
-                }
-
-                if ( model.DeclaredApiVersions.Count > 0 )
-                {
-                    return false;
-                }
-            }
-
-            model = actionDescriptor.GetProperty<ControllerModel>()?.GetProperty<ApiVersionModel>();
-
-            return model != null && ( model.IsApiVersionNeutral || model.DeclaredApiVersions.Contains( apiVersion ) );
-        }
+        protected virtual bool ShouldExploreAction( ActionDescriptor actionDescriptor, ApiVersion apiVersion ) => actionDescriptor.IsMappedTo( apiVersion );
 
         /// <summary>
         /// Populates the API version parameters for the specified API description.
@@ -94,26 +66,6 @@
         /// <param name="apiVersion">The <see cref="ApiVersion">API version</see> used to populate parameters with.</param>
         protected virtual void PopulateApiVersionParameters( ApiDescription apiDescription, ApiVersion apiVersion )
         {
-            Arg.NotNull( apiDescription, nameof( apiDescription ) );
-            Arg.NotNull( apiVersion, nameof( apiVersion ) );
-
-            var action = apiDescription.ActionDescriptor;
-            var model = action.GetProperty<ApiVersionModel>();
-
-            if ( model.IsApiVersionNeutral )
-            {
-                return;
-            }
-            else if ( model.DeclaredApiVersions.Count == 0 )
-            {
-                model = action.GetProperty<ControllerModel>()?.GetProperty<ApiVersionModel>();
-
-                if ( model?.IsApiVersionNeutral == true )
-                {
-                    return;
-                }
-            }
-
             var parameterSource = Options.ApiVersionParameterSource;
             var context = new ApiVersionParameterDescriptionContext( apiDescription, apiVersion, modelMetadata.Value, Options );
 
@@ -127,6 +79,11 @@
         /// <remarks>The default implementation performs no action.</remarks>
         public virtual void OnProvidersExecuted( ApiDescriptionProviderContext context )
         {
+            if ( context == null )
+            {
+                throw new ArgumentNullException( nameof( context ) );
+            }
+
             var results = context.Results;
 
             if ( results.Count == 0 )
@@ -135,7 +92,6 @@
             }
 
             var groupResults = new List<ApiDescription>();
-            var parameterSource = Options.ApiVersionParameterSource;
 
             foreach ( var version in FlattenApiVersions( results ) )
             {
@@ -155,12 +111,7 @@
                     groupResult.GroupName = groupName;
                     groupResult.SetApiVersion( version );
                     PopulateApiVersionParameters( groupResult, version );
-
-                    if ( Options.SubstituteApiVersionInUrl )
-                    {
-                        UpdateRelativePathAndRemoveApiVersionParameterIfNecessary( groupResult, Options.SubstitutionFormat );
-                    }
-
+                    groupResult.TryUpdateRelativePathAndRemoveApiVersionParameter( Options );
                     groupResults.Add( groupResult );
                 }
             }
@@ -180,43 +131,16 @@
         /// <remarks>The default implementation performs no operation.</remarks>
         public virtual void OnProvidersExecuting( ApiDescriptionProviderContext context ) { }
 
-        static void UpdateRelativePathAndRemoveApiVersionParameterIfNecessary( ApiDescription apiDescription, string apiVersionFormat )
-        {
-            Contract.Requires( apiDescription != null );
-
-            var parameter = apiDescription.ParameterDescriptions.FirstOrDefault( pd => pd.Source == BindingSource.Path && pd.ModelMetadata?.DataTypeName == nameof( ApiVersion ) );
-
-            if ( parameter == null )
-            {
-                return;
-            }
-
-            var relativePath = apiDescription.RelativePath;
-            var token = '{' + parameter.Name + '}';
-            var value = apiDescription.GetApiVersion().ToString( apiVersionFormat, InvariantCulture );
-            var newRelativePath = relativePath.Replace( token, value );
-
-            if ( relativePath != newRelativePath )
-            {
-                apiDescription.RelativePath = newRelativePath;
-                apiDescription.ParameterDescriptions.Remove( parameter );
-            }
-        }
-
         IEnumerable<ApiVersion> FlattenApiVersions( IEnumerable<ApiDescription> descriptions )
         {
-            Contract.Requires( descriptions != null );
-            Contract.Ensures( Contract.Result<IEnumerable<ApiVersion>>() != null );
-
             var versions = new HashSet<ApiVersion>();
 
             foreach ( var description in descriptions )
             {
                 var action = description.ActionDescriptor;
-                var model = action.GetProperty<ApiVersionModel>() ?? ApiVersionModel.Empty;
-                var implicitModel = action.GetProperty<ControllerModel>()?.GetProperty<ApiVersionModel>() ?? ApiVersionModel.Empty;
+                var model = action.GetApiVersionModel( Explicit | Implicit );
 
-                foreach ( var version in model.DeclaredApiVersions.Union( implicitModel.DeclaredApiVersions ) )
+                foreach ( var version in model.DeclaredApiVersions )
                 {
                     versions.Add( version );
                 }

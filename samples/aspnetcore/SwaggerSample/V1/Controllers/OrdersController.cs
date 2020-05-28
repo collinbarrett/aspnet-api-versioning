@@ -6,10 +6,11 @@
     /// <summary>
     /// Represents a RESTful service of orders.
     /// </summary>
+    [ApiController]
     [ApiVersion( "1.0" )]
     [ApiVersion( "0.9", Deprecated = true )]
     [Route( "api/[controller]" )]
-    public class OrdersController : Controller
+    public class OrdersController : ControllerBase
     {
         /// <summary>
         /// Gets a single order.
@@ -18,7 +19,8 @@
         /// <returns>The requested order.</returns>
         /// <response code="200">The order was successfully retrieved.</response>
         /// <response code="404">The order does not exist.</response>
-        [HttpGet( "{id:int}", Name = "GetOrderById" )]
+        [HttpGet( "{id:int}" )]
+        [Produces( "application/json" )]
         [ProducesResponseType( typeof( Order ), 200 )]
         [ProducesResponseType( 404 )]
         public IActionResult Get( int id ) => Ok( new Order() { Id = id, Customer = "John Doe" } );
@@ -32,18 +34,13 @@
         /// <response code="400">The order is invalid.</response>
         [HttpPost]
         [MapToApiVersion( "1.0" )]
+        [Produces( "application/json" )]
         [ProducesResponseType( typeof( Order ), 201 )]
         [ProducesResponseType( 400 )]
         public IActionResult Post( [FromBody] Order order )
         {
-            if ( !ModelState.IsValid )
-            {
-                return BadRequest( ModelState );
-            }
-
             order.Id = 42;
-
-            return CreatedAtRoute( "GetOrderById", new { id = order.Id }, order );
+            return CreatedAtAction( nameof( Get ), new { id = order.Id }, order );
         }
     }
 }

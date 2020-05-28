@@ -2,13 +2,20 @@
 
 namespace Microsoft.Examples
 {
-    using Configuration;
-    using Controllers;
     using global::Owin;
+    using Microsoft.AspNet.OData;
     using Microsoft.AspNet.OData.Batch;
     using Microsoft.AspNet.OData.Builder;
+    using Microsoft.AspNet.OData.Routing;
+    using Microsoft.Examples.Configuration;
+    using Microsoft.Examples.Controllers;
+    using Microsoft.OData;
+    using Microsoft.OData.UriParser;
     using Microsoft.Web.Http.Versioning.Conventions;
+    using System;
     using System.Web.Http;
+    using static Microsoft.OData.ODataUrlKeyDelimiter;
+    using static Microsoft.OData.ServiceLifetime;
 
     public class Startup
     {
@@ -30,7 +37,7 @@ namespace Microsoft.Examples
                     options.Conventions.Controller<PeopleController>()
                                        .HasApiVersion( 1, 0 )
                                        .HasApiVersion( 2, 0 )
-                                       .Action( c => c.Patch( default( int ), null, null ) ).MapToApiVersion( 2, 0 );
+                                       .Action( c => c.Patch( default, default, default ) ).MapToApiVersion( 2, 0 );
 
                     options.Conventions.Controller<People2Controller>()
                                        .HasApiVersion( 3, 0 );
@@ -38,7 +45,6 @@ namespace Microsoft.Examples
 
             var modelBuilder = new VersionedODataModelBuilder( configuration )
             {
-                ModelBuilderFactory = () => new ODataConventionModelBuilder().EnableLowerCamelCase(),
                 ModelConfigurations =
                 {
                     new PersonModelConfiguration(),
@@ -48,9 +54,34 @@ namespace Microsoft.Examples
             var models = modelBuilder.GetEdmModels();
             var batchHandler = new DefaultODataBatchHandler( httpServer );
 
-            configuration.MapVersionedODataRoutes( "odata", "api", models, batchHandler );
-            configuration.MapVersionedODataRoutes( "odata-bypath", "v{apiVersion}", models );
+            // NOTE: you do NOT and should NOT use both the query string and url segment methods together.
+            // this configuration is merely illustrating that they can coexist and allows you to easily
+            // experiment with either configuration. one of these would be removed in a real application.
+            configuration.MapVersionedODataRoutes( "odata", "api", models, ConfigureContainer, batchHandler );
+            configuration.MapVersionedODataRoutes( "odata-bypath", "api/v{apiVersion}", models, ConfigureContainer );
+
             appBuilder.UseWebApi( httpServer );
+        }
+
+        static void ConfigureContainer( IContainerBuilder builder )
+        {
+            builder.AddService<IODataPathHandler>( Singleton, sp => new DefaultODataPathHandler() { UrlKeyDelimiter = Parentheses } );
+            builder.AddService<ODataUriResolver>( Singleton, sp => new UnqualifiedCallAndEnumPrefixFreeResolver() { EnableCaseInsensitive = true } );
+        }
+
+        public static string ContentRootPath
+        {
+            get
+            {
+                var app = AppDomain.CurrentDomain;
+
+                if ( string.IsNullOrEmpty( app.RelativeSearchPath ) )
+                {
+                    return app.BaseDirectory;
+                }
+
+                return app.RelativeSearchPath;
+            }
         }
     }
 }

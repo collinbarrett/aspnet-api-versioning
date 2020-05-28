@@ -5,6 +5,7 @@
     using Microsoft.AspNetCore.Mvc.Abstractions;
     using Microsoft.AspNetCore.Mvc.ApiExplorer;
     using Microsoft.AspNetCore.Mvc.Controllers;
+    using Microsoft.AspNetCore.Mvc.Versioning;
 #endif
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.OData;
@@ -22,11 +23,14 @@
     using System.Web.Http.Dispatcher;
     using ControllerActionDescriptor = System.Web.Http.Controllers.HttpActionDescriptor;
 #endif
+    using static Microsoft.OData.ODataUrlKeyDelimiter;
+    using static ODataRouteTemplateGenerationKind;
 
     sealed partial class ODataRouteBuilderContext
     {
-        readonly IServiceProvider serviceProvider;
-        readonly ODataRouteAttribute routeAttribute;
+        readonly ODataRouteAttribute? routeAttribute;
+
+        internal IServiceProvider Services { get; }
 
         internal ApiVersion ApiVersion { get; }
 
@@ -34,23 +38,27 @@
         internal ODataApiExplorerOptions Options { get; }
 
         internal IList<ApiParameterDescription> ParameterDescriptions { get; }
-#else
-        internal IList<ParameterDescriptor> ParameterDescriptions => ActionDescriptor.Parameters;
-#endif
 
-        internal IEnumerable<Assembly> Assemblies { get; }
+        internal ODataRouteTemplateGenerationKind RouteTemplateGeneration { get; } = Client;
+#else
+        internal ODataApiVersioningOptions Options { get; }
+
+        internal IList<ParameterDescriptor> ParameterDescriptions => ActionDescriptor.Parameters;
+
+        internal ODataRouteTemplateGenerationKind RouteTemplateGeneration { get; } = Server;
+#endif
 
         internal IEdmModel EdmModel { get; }
 
-        internal string RouteTemplate { get; }
+        internal string? RouteTemplate { get; }
 
         internal ODataRoute Route { get; }
 
         internal ControllerActionDescriptor ActionDescriptor { get; }
 
-        internal IEdmEntitySet EntitySet { get; }
+        internal IEdmEntitySet? EntitySet { get; }
 
-        internal IEdmOperation Operation { get; }
+        internal IEdmOperation? Operation { get; }
 
         internal ODataRouteActionType ActionType { get; }
 
@@ -64,7 +72,7 @@
 
         internal bool IsBound => IsOperation && EntitySet != null;
 
-        internal bool AllowUnqualifiedEnum => serviceProvider.GetRequiredService<ODataUriResolver>() is StringAsEnumResolver;
+        internal bool AllowUnqualifiedEnum => Services.GetRequiredService<ODataUriResolver>() is StringAsEnumResolver;
 
         internal static ODataRouteActionType GetActionType( IEdmEntitySet entitySet, IEdmOperation operation )
         {
@@ -93,5 +101,9 @@
 
             return ODataRouteActionType.Unknown;
         }
+
+        // Slash became the default 4/18/2018
+        // REF: https://github.com/OData/WebApi/pull/1393
+        static ODataUrlKeyDelimiter UrlKeyDelimiterOrDefault( ODataUrlKeyDelimiter? urlKeyDelimiter ) => urlKeyDelimiter ?? Slash;
     }
 }

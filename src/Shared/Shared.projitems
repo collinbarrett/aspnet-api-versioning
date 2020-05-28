@@ -9,9 +9,8 @@
     <Import_RootNamespace>Microsoft</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="$(MSBuildThisFileDirectory)Arg.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SharedAssemblyInfo.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)StringExtensions.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)TypeNameHelper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TypeExtensions.cs" />
   </ItemGroup>
 </Project>

@@ -17,7 +17,11 @@
         /// <param name="apiVersion">The <see cref="ApiVersion">API version</see> associated with the <paramref name="builder"/>.</param>
         public void Apply( ODataModelBuilder builder, ApiVersion apiVersion )
         {
-            var person = builder.EntitySet<Person>( "People" ).EntityType.HasKey( p => p.Id );
+            var person = builder.EntitySet<Person>( "People" ).EntityType;
+            var address = builder.EntityType<Address>().HasKey( a => a.Id );
+
+            person.HasKey( p => p.Id );
+            person.Select().OrderBy( "firstName", "lastName" );
 
             if ( apiVersion < ApiVersions.V3 )
             {
@@ -31,6 +35,9 @@
 
             if ( apiVersion > ApiVersions.V1 )
             {
+                person.ContainsOptional( p => p.HomeAddress );
+                person.Ignore( p => p.WorkAddress );
+
                 var function = person.Collection.Function( "NewHires" );
 
                 function.Parameter<DateTime>( "Since" );
@@ -39,6 +46,7 @@
 
             if ( apiVersion > ApiVersions.V2 )
             {
+                person.ContainsOptional( p => p.WorkAddress );
                 person.Action( "Promote" ).Parameter<string>( "title" );
             }
         }

@@ -1,22 +1,18 @@
 ﻿namespace given_a_versioned_Controller
 {
     using FluentAssertions;
+    using Microsoft.AspNetCore.Mvc;
     using Microsoft.AspNetCore.Mvc.Basic;
-    using Microsoft.AspNetCore.Mvc.Basic.Controllers;
+    using Microsoft.AspNetCore.Mvc.Infrastructure;
+#if !NETCOREAPP
     using Microsoft.AspNetCore.Mvc.Internal;
+#endif
     using System;
-    using System.Reflection;
     using System.Threading.Tasks;
     using Xunit;
 
-    public class when_two_route_templates_overlap : BasicAcceptanceTest
+    public class when_two_route_templates_overlap : AcceptanceTest, IClassFixture<OverlappingRouteTemplateFixture>
     {
-        public when_two_route_templates_overlap()
-        {
-            FilteredControllerTypes.Clear();
-            FilteredControllerTypes.Add( typeof( OverlappingRouteTemplateController ).GetTypeInfo() );
-        }
-
         [Fact]
         public async Task then_the_higher_precedence_route_should_be_selected_during_the_first_request()
         {
@@ -61,7 +57,22 @@
 
             // assert
             result1.Should().Be( "{\"id\":42,\"childId\":\"abc\"}" );
-            act.Should().Throw<AmbiguousActionException>();
+
+            if ( UsingEndpointRouting )
+            {
+                act.Should().Throw<Exception>().And.GetType().Name.Should().Be( "AmbiguousMatchException" );
+            }
+            else
+            {
+                act.Should().Throw<AmbiguousActionException>();
+            }
         }
+
+        public when_two_route_templates_overlap( OverlappingRouteTemplateFixture fixture ) : base( fixture ) { }
+    }
+
+    public class when_two_route_templates_overlap_ : when_two_route_templates_overlap, IClassFixture<OverlappingRouteTemplateEndpointFixture>
+    {
+        public when_two_route_templates_overlap_( OverlappingRouteTemplateEndpointFixture fixture ) : base( fixture ) { }
     }
 }

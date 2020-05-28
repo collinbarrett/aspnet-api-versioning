@@ -4,20 +4,17 @@
   <PropertyGroup Label="Code Analysis">
     <Features>IOperation</Features>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <CodeAnalysisRuleSet>$(MSBuildThisFileDirectory)..\tools\code-analysis.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSet>$(MSBuildThisFileDirectory)code-analysis.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
 
   <ItemGroup Label="Code Analysis">
-    <CodeAnalysisDictionary Include="$(MSBuildThisFileDirectory)..\tools\custom-dictionary.xml" Link="custom-dictionary.xml" />
-  </ItemGroup>
-
-  <ItemGroup Label="Code Analysis">
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)..\tools\stylecop.json" Link="stylecop.json" Visible="false" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json" Link="stylecop.json" Visible="false" />
   </ItemGroup>
 
   <ItemGroup Label="NuGet">
-    <PackageReference Include="Microsoft.CodeAnalysis.FxCopAnalyzers" Version="2.6.1" PrivateAssets="All" />
-    <PackageReference Include="StyleCop.Analyzers" Version="1.1.0-beta008" PrivateAssets="All" />
+   <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="2.9.8" PrivateAssets="All" />
+   <PackageReference Include="Microsoft.CodeAnalysis.FxCopAnalyzers" Version="2.9.8" PrivateAssets="All" />
+   <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-*" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>

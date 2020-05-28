@@ -3,19 +3,14 @@
     using Microsoft.AspNet.OData;
     using Microsoft.AspNetCore.Mvc.Abstractions;
     using Microsoft.AspNetCore.Mvc.ModelBinding;
-    using Microsoft.DotNet.PlatformAbstractions;
     using Microsoft.OData.Edm;
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
 
     sealed class PseudoModelBindingVisitor
     {
         internal PseudoModelBindingVisitor( ApiParameterContext context, ParameterDescriptor parameter )
         {
-            Contract.Requires( context != null );
-            Contract.Requires( parameter != null );
-
             Context = context;
             Parameter = parameter;
         }
@@ -24,11 +19,11 @@
 
         internal ParameterDescriptor Parameter { get; }
 
-        private HashSet<PropertyKey> Visited { get; } = new HashSet<PropertyKey>( new PropertyKeyEqualityComparer() );
+        HashSet<PropertyKey> Visited { get; } = new HashSet<PropertyKey>( new PropertyKeyEqualityComparer() );
 
         internal void WalkParameter( ApiParameterDescriptionContext context ) => Visit( context, BindingSource.ModelBinding, containerName: string.Empty );
 
-        private static string GetName( string containerName, ApiParameterDescriptionContext metadata )
+        static string GetName( string containerName, ApiParameterDescriptionContext metadata )
         {
             if ( string.IsNullOrEmpty( metadata.BinderModelName ) )
             {
@@ -38,7 +33,7 @@
             return metadata.BinderModelName;
         }
 
-        private void Visit( ApiParameterDescriptionContext bindingContext, BindingSource ambientSource, string containerName )
+        void Visit( ApiParameterDescriptionContext bindingContext, BindingSource ambientSource, string containerName )
         {
             var source = bindingContext.BindingSource;
 
@@ -63,6 +58,8 @@
                 newContainerName = GetName( containerName, bindingContext );
             }
 
+            source ??= ambientSource;
+
             for ( var i = 0; i < modelMetadata.Properties.Count; i++ )
             {
                 var propertyMetadata = modelMetadata.Properties[i];
@@ -71,33 +68,35 @@
 
                 if ( Visited.Add( key ) )
                 {
-                    Visit( propertyContext, source ?? ambientSource, newContainerName );
+                    Visit( propertyContext, source, newContainerName );
                 }
                 else
                 {
-                    Context.Results.Add( CreateResult( propertyContext, source ?? ambientSource, newContainerName ) );
+                    Context.Results.Add( CreateResult( propertyContext, source, newContainerName ) );
                 }
             }
         }
 
         ApiParameterDescription CreateResult( ApiParameterDescriptionContext bindingContext, BindingSource source, string containerName )
         {
-            var type = bindingContext.ModelMetadata.ModelType;
+            var modelMetadata = bindingContext.ModelMetadata;
+            var type = modelMetadata.ModelType;
 
             if ( type.IsODataActionParameters() && Context.RouteContext.Operation?.IsAction() == true )
             {
                 var action = (IEdmAction) Context.RouteContext.Operation;
                 var apiVersion = Context.RouteContext.ApiVersion;
-                type = Context.TypeBuilder.NewActionParameters( action, apiVersion );
+
+                type = Context.TypeBuilder.NewActionParameters( Context.Services, action, apiVersion, Context.RouteContext.ActionDescriptor.ControllerName );
             }
             else
             {
-                type = type.SubstituteIfNecessary( Context.Services, Context.Assemblies, Context.TypeBuilder );
+                type = type.SubstituteIfNecessary( new TypeSubstitutionContext( Context.Services, Context.TypeBuilder ) );
             }
 
             return new ApiParameterDescription()
             {
-                ModelMetadata = bindingContext.ModelMetadata,
+                ModelMetadata = modelMetadata.SubstituteIfNecessary( type ),
                 Name = GetName( containerName, bindingContext ),
                 Source = source,
                 Type = type,
@@ -105,7 +104,7 @@
             };
         }
 
-        struct PropertyKey
+        readonly struct PropertyKey
         {
             public readonly Type ContainerType;
             public readonly string PropertyName;
@@ -123,16 +122,7 @@
         {
             public bool Equals( PropertyKey x, PropertyKey y ) => x.ContainerType == y.ContainerType && x.PropertyName == y.PropertyName && x.Source == y.Source;
 
-            public int GetHashCode( PropertyKey obj )
-            {
-                var hashCodeCombiner = HashCodeCombiner.Start();
-
-                hashCodeCombiner.Add( obj.ContainerType );
-                hashCodeCombiner.Add( obj.PropertyName );
-                hashCodeCombiner.Add( obj.Source );
-
-                return hashCodeCombiner.CombinedHash;
-            }
+            public int GetHashCode( PropertyKey obj ) => HashCode.Combine( obj.ContainerType, obj.PropertyName, obj.Source );
         }
     }
 }

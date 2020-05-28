@@ -7,7 +7,7 @@
     /// <content>
     /// Provides additional implementation specific to Microsoft ASP.NET Web API.
     /// </content>
-    public partial class ControllerApiVersionConventionBuilder : IActionConventionBuilder
+    public partial class ControllerApiVersionConventionBuilder
     {
         /// <summary>
         /// Gets a value indicating whether the builder has any related action conventions.
@@ -21,10 +21,8 @@
         /// <param name="method">The <see cref="MethodInfo">method</see> representing the action to retrieve the convention for.</param>
         /// <param name="convention">The retrieved <see cref="IApiVersionConvention{T}">convention</see> or <c>null</c>.</param>
         /// <returns>True if the convention was successfully retrieved; otherwise, false.</returns>
-        protected override bool TryGetConvention( MethodInfo method, out IApiVersionConvention<HttpActionDescriptor> convention )
+        protected override bool TryGetConvention( MethodInfo method, out IApiVersionConvention<HttpActionDescriptor>? convention )
         {
-            Arg.NotNull( method, nameof( method ) );
-
             if ( ActionBuilders.TryGetValue( method, out var builder ) )
             {
                 convention = builder;

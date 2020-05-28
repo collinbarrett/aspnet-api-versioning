@@ -15,13 +15,14 @@
         {
             // arrange
             var method = typeof( StubController ).GetMethod( nameof( StubController.Delete ) );
-            var builder = new Mock<IActionConventionBuilder<StubController>>();
+            var controllerBuilder = new ControllerApiVersionConventionBuilder<StubController>();
+            var actionBuilder = new Mock<ActionApiVersionConventionBuilder<StubController>>( controllerBuilder );
 
             // act
-            builder.Object.Action( c => c.Delete() );
+            actionBuilder.Object.Action( c => c.Delete() );
 
             // assert
-            builder.Verify( b => b.Action( method ), Once() );
+            actionBuilder.Verify( b => b.Action( method ), Once() );
         }
 
         [Fact]
@@ -29,23 +30,25 @@
         {
             // arrange
             var method = typeof( StubController ).GetMethod( nameof( StubController.Get ) );
-            var builder = new Mock<IActionConventionBuilder<StubController>>();
+            var controllerBuilder = new ControllerApiVersionConventionBuilder<StubController>();
+            var actionBuilder = new Mock<ActionApiVersionConventionBuilder<StubController>>( controllerBuilder );
 
             // act
-            builder.Object.Action( c => c.Get() );
+            actionBuilder.Object.Action( c => c.Get() );
 
             // assert
-            builder.Verify( b => b.Action( method ), Once() );
+            actionBuilder.Verify( b => b.Action( method ), Once() );
         }
 
         [Fact]
         public void action_should_throw_exception_when_func_delegate_expression_is_not_a_method()
         {
             // arrange
-            var builder = new Mock<IActionConventionBuilder<StubController>>().Object;
+            var controllerBuilder = new ControllerApiVersionConventionBuilder<StubController>();
+            var actionBuilder = new Mock<ActionApiVersionConventionBuilder<StubController>>( controllerBuilder ).Object;
 
             // act
-            Action action = () => builder.Action( c => c.Timeout );
+            Action action = () => actionBuilder.Action( c => c.Timeout );
 
             // assert
             action.Should().Throw<InvalidOperationException>().And
@@ -59,9 +62,7 @@
             const string methodName = nameof( StubController.Post );
             var controllerType = typeof( StubController );
             var method = controllerType.GetMethods().Single( m => m.Name == methodName && m.GetParameters().Length == 0 );
-            var builder = new Mock<IActionConventionBuilder>();
-
-            builder.SetupGet( b => b.ControllerType ).Returns( controllerType );
+            var builder = new Mock<ActionApiVersionConventionBuilder>( new ControllerApiVersionConventionBuilder( controllerType ) );
 
             // act
             builder.Object.Action( methodName );
@@ -77,9 +78,7 @@
             const string methodName = nameof( StubController.Post );
             var controllerType = typeof( StubController );
             var method = controllerType.GetMethods().Single( m => m.Name == methodName && m.GetParameters().Length == 1 );
-            var builder = new Mock<IActionConventionBuilder>();
-
-            builder.SetupGet( b => b.ControllerType ).Returns( controllerType );
+            var builder = new Mock<ActionApiVersionConventionBuilder>( new ControllerApiVersionConventionBuilder( controllerType ) );
 
             // act
             builder.Object.Action( methodName, typeof( int ) );
@@ -93,9 +92,7 @@
         {
             // arrange
             var message = "An action method with the name 'NoSuchMethod' could not be found. The method must be public, non-static, and not have the NonActionAttribute applied.";
-            var builder = new Mock<IActionConventionBuilder>();
-
-            builder.SetupGet( b => b.ControllerType ).Returns( typeof( StubController ) );
+            var builder = new Mock<ActionApiVersionConventionBuilder>( new ControllerApiVersionConventionBuilder( typeof( StubController ) ) );
 
             // act
             Action actionConvention = () => builder.Object.Action( "NoSuchMethod" );

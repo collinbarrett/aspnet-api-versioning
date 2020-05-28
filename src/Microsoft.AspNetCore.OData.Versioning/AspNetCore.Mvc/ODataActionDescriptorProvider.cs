@@ -1,34 +1,37 @@
-﻿namespace Microsoft.AspNetCore.Mvc
+﻿#pragma warning disable CA1812
+
+namespace Microsoft.AspNetCore.Mvc
 {
     using Microsoft.AspNet.OData;
     using Microsoft.AspNet.OData.Routing;
     using Microsoft.AspNetCore.Mvc.Abstractions;
-    using Microsoft.AspNetCore.Mvc.ApplicationParts;
     using Microsoft.AspNetCore.Mvc.Controllers;
+    using Microsoft.AspNetCore.Mvc.ModelBinding;
+    using Microsoft.AspNetCore.Mvc.Versioning;
+    using Microsoft.Extensions.Options;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Linq;
 
     sealed class ODataActionDescriptorProvider : IActionDescriptorProvider
     {
         readonly IODataRouteCollectionProvider routeCollectionProvider;
-        readonly ApplicationPartManager partManager;
+        readonly IModelMetadataProvider modelMetadataProvider;
+        readonly IOptions<ODataApiVersioningOptions> options;
 
-        public ODataActionDescriptorProvider( IODataRouteCollectionProvider routeCollectionProvider, ApplicationPartManager partManager )
+        public ODataActionDescriptorProvider(
+            IODataRouteCollectionProvider routeCollectionProvider,
+            IModelMetadataProvider modelMetadataProvider,
+            IOptions<ODataApiVersioningOptions> options )
         {
-            Contract.Requires( routeCollectionProvider != null );
-            Contract.Requires( partManager != null );
-
             this.routeCollectionProvider = routeCollectionProvider;
-            this.partManager = partManager;
+            this.modelMetadataProvider = modelMetadataProvider;
+            this.options = options;
         }
 
         public int Order => 0;
 
         public void OnProvidersExecuted( ActionDescriptorProviderContext context )
         {
-            Contract.Requires( context != null );
-
             if ( routeCollectionProvider.Items.Count == 0 )
             {
                 return;
@@ -38,7 +41,7 @@
             var conventions = new IODataActionDescriptorConvention[]
             {
                 new ImplicitHttpMethodConvention(),
-                new ODataRouteBindingInfoConvention( routeCollectionProvider, partManager ),
+                new ODataRouteBindingInfoConvention( routeCollectionProvider, modelMetadataProvider, options ),
             };
 
             foreach ( var action in ODataActions( results ) )
@@ -54,13 +57,10 @@
 
         static IEnumerable<ControllerActionDescriptor> ODataActions( IEnumerable<ActionDescriptor> results )
         {
-            Contract.Requires( results != null );
-            Contract.Ensures( Contract.Result<IEnumerable<ControllerActionDescriptor>>() != null );
-
             foreach ( var result in results )
             {
                 if ( result is ControllerActionDescriptor action &&
-                    action.ControllerTypeInfo.IsODataController() &&
+                     action.ControllerTypeInfo.IsODataController() &&
                     !action.ControllerTypeInfo.IsMetadataController() )
                 {
                     yield return action;

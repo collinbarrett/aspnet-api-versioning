@@ -6,7 +6,6 @@
 #endif
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Linq;
     using System.Reflection;
 #if WEBAPI
@@ -14,19 +13,14 @@
 #endif
     using static System.Globalization.CultureInfo;
     using static System.String;
+#if !WEBAPI
+    using static System.StringComparison;
+#endif
 
     static class EdmExtensions
     {
-#if WEBAPI
-        internal static Type GetClrType( this IEdmType edmType, IAssembliesResolver assembliesResolver ) =>
-            edmType.GetClrType( assembliesResolver.GetAssemblies() );
-#endif
-
-        internal static Type GetClrType( this IEdmType edmType, IEnumerable<Assembly> assemblies )
+        internal static Type? GetClrType( this IEdmType edmType, IEdmModel edmModel )
         {
-            Contract.Requires( edmType != null );
-            Contract.Requires( assemblies != null );
-
             if ( !( edmType is IEdmSchemaType schemaType ) )
             {
                 return null;
@@ -40,23 +34,18 @@
                 return type;
             }
 
-            using ( var matchingTypes = GetMatchingTypes( typeName, assemblies ).GetEnumerator() )
-            {
-                if ( matchingTypes.MoveNext() )
-                {
-                    type = matchingTypes.Current;
+            var element = (IEdmSchemaType) edmType;
+            var annotationValue = edmModel.GetAnnotationValue<ClrTypeAnnotation>( element );
 
-                    if ( !matchingTypes.MoveNext() )
-                    {
-                        return type;
-                    }
-                }
+            if ( annotationValue != null )
+            {
+                return annotationValue.ClrType;
             }
 
             return null;
         }
 
-        static Type DeriveFromWellKnowPrimitive( string edmFullName )
+        static Type? DeriveFromWellKnowPrimitive( string edmFullName )
         {
             switch ( edmFullName )
             {
@@ -73,71 +62,32 @@
                 case "Edm.DateTime":
                 case "Edm.DateTimeOffset":
                 case "Edm.Guid":
+#if WEBAPI
                     return Type.GetType( edmFullName.Replace( "Edm", "System" ), throwOnError: true );
+#else
+                    return Type.GetType( edmFullName.Replace( "Edm", "System", Ordinal ), throwOnError: true );
+#endif
                 case "Edm.Duration":
                     return typeof( TimeSpan );
                 case "Edm.Binary":
                     return typeof( byte[] );
                 case "Edm.Geography":
                 case "Edm.Geometry":
+#if WEBAPI
                     return Type.GetType( edmFullName.Replace( "Edm", "Microsoft.Spatial" ), throwOnError: true );
+#else
+                    return Type.GetType( edmFullName.Replace( "Edm", "Microsoft.Spatial", Ordinal ), throwOnError: true );
+#endif
                 case "Edm.Date":
                 case "Edm.TimeOfDay":
+#if WEBAPI
                     return Type.GetType( edmFullName.Replace( "Edm", "Microsoft.OData.Edm" ), throwOnError: true );
+#else
+                    return Type.GetType( edmFullName.Replace( "Edm", "Microsoft.OData.Edm", Ordinal ), throwOnError: true );
+#endif
             }
 
             return null;
-        }
-
-        static string EdmFullName( this Type clrType ) => Format( InvariantCulture, "{0}.{1}", clrType.Namespace, clrType.MangleClrTypeName() );
-
-        static string MangleClrTypeName( this Type type )
-        {
-            Contract.Requires( type != null );
-            Contract.Ensures( !IsNullOrEmpty( Contract.Result<string>() ) );
-
-            if ( !type.IsGenericType )
-            {
-                return type.Name;
-            }
-
-            var typeName = type.Name.Replace( '`', '_' );
-            var typeArgNames = Join( "_", type.GetGenericArguments().Select( t => t.MangleClrTypeName() ) );
-
-            return Format( InvariantCulture, "{0}Of{1}", typeName, typeArgNames );
-        }
-
-        static IEnumerable<Type> GetMatchingTypes( string edmFullName, IEnumerable<Assembly> assemblies ) =>
-            assemblies.LoadedTypes().Where( t => t.IsPublic && t.EdmFullName() == edmFullName );
-
-        static IEnumerable<Type> LoadedTypes( this IEnumerable<Assembly> assemblies )
-        {
-            var loadedTypes = new List<Type>();
-
-            foreach ( var assembly in assemblies.Where( a => a?.IsDynamic == false ) )
-            {
-                var exportedTypes = default( IEnumerable<Type> );
-
-                try
-                {
-                    exportedTypes = assembly.ExportedTypes;
-                }
-                catch ( ReflectionTypeLoadException ex )
-                {
-                    exportedTypes = ex.Types;
-                }
-                catch
-                {
-                    continue;
-                }
-
-                if ( exportedTypes != null )
-                {
-                    loadedTypes.AddRange( exportedTypes );
-                }
-            }
-
-            return loadedTypes;
         }
     }
 }

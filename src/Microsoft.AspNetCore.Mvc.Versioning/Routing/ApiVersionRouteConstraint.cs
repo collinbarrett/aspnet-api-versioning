@@ -25,18 +25,17 @@
         /// <returns>True if the route constraint is matched; otherwise, false.</returns>
         public bool Match( HttpContext httpContext, IRouter route, string routeKey, RouteValueDictionary values, RouteDirection routeDirection )
         {
+            if ( values == null )
+            {
+                throw new ArgumentNullException( nameof( values ) );
+            }
+
             if ( IsNullOrEmpty( routeKey ) )
             {
                 return false;
             }
 
-            var feature = httpContext.Features.Get<IApiVersioningFeature>();
-
-            if ( values.TryGetValue( routeKey, out string value ) )
-            {
-                feature.RawRequestedApiVersion = value;
-            }
-            else
+            if ( !values.TryGetValue( routeKey, out string value ) )
             {
                 return false;
             }
@@ -45,6 +44,15 @@
             {
                 return !IsNullOrEmpty( value );
             }
+
+            if ( httpContext == null )
+            {
+                throw new ArgumentNullException( nameof( httpContext ) );
+            }
+
+            var feature = httpContext.Features.Get<IApiVersioningFeature>();
+
+            feature.RawRequestedApiVersion = value;
 
             if ( TryParse( value, out var requestedVersion ) )
             {

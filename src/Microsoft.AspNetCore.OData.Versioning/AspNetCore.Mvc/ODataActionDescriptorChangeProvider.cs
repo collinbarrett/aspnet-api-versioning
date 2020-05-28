@@ -5,7 +5,6 @@
     using System;
     using System.Collections.Generic;
     using System.ComponentModel;
-    using System.Diagnostics.Contracts;
     using System.Linq;
     using static System.ComponentModel.EditorBrowsableState;
 
@@ -91,8 +90,6 @@
 
             public IDisposable RegisterChangeCallback( Action<object> callback, object state )
             {
-                Arg.NotNull( callback, nameof( callback ) );
-
                 var item = (callback, state);
 
                 lock ( syncRoot )
@@ -103,7 +100,7 @@
                 return new ChangeSubscription( this, item );
             }
 
-            internal void Remove( (Action<object>, object) item )
+            internal void Remove( (Action<object> Callback, object State) item )
             {
                 lock ( syncRoot )
                 {
@@ -135,10 +132,8 @@
             readonly (Action<object>, object) callback;
             bool disposed;
 
-            internal ChangeSubscription( ChangeToken changeToken, (Action<object>, object) callback )
+            internal ChangeSubscription( ChangeToken changeToken, (Action<object> Func, object State) callback )
             {
-                Contract.Requires( changeToken != null );
-
                 this.changeToken = changeToken;
                 this.callback = callback;
             }

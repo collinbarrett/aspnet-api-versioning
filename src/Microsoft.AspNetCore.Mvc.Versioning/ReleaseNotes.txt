@@ -1,0 +1,1 @@
+﻿Drop support for .NET Core 2.2

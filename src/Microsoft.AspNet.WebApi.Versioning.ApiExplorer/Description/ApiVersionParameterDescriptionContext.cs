@@ -1,8 +1,9 @@
 ﻿namespace Microsoft.Web.Http.Description
 {
+    using Microsoft.Web.Http.Routing;
     using Microsoft.Web.Http.Versioning;
+    using System;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Linq;
     using System.Net.Http.Formatting;
     using System.Net.Http.Headers;
@@ -18,6 +19,7 @@
     public class ApiVersionParameterDescriptionContext : IApiVersionParameterDescriptionContext
     {
         readonly List<ApiParameterDescription> parameters = new List<ApiParameterDescription>( 1 );
+        readonly Lazy<bool> versionNeutral;
         bool optional;
 
         /// <summary>
@@ -31,14 +33,16 @@
             ApiVersion apiVersion,
             ApiExplorerOptions options )
         {
-            Arg.NotNull( apiDescription, nameof( apiDescription ) );
-            Arg.NotNull( apiVersion, nameof( apiVersion ) );
-            Arg.NotNull( options, nameof( options ) );
+            if ( options == null )
+            {
+                throw new ArgumentNullException( nameof( options ) );
+            }
 
             ApiDescription = apiDescription;
             ApiVersion = apiVersion;
             Options = options;
             optional = options.AssumeDefaultVersionWhenUnspecified && apiVersion == options.DefaultApiVersion;
+            versionNeutral = new Lazy<bool>( () => ApiDescription.ActionDescriptor.GetApiVersionModel().IsApiVersionNeutral );
         }
 
         /// <summary>
@@ -52,6 +56,12 @@
         /// </summary>
         /// <value>The associated <see cref="ApiVersion">API version</see>.</value>
         protected ApiVersion ApiVersion { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether the current API is version-neutral.
+        /// </summary>
+        /// <value>True if the current API is version-neutral; otherwise, false.</value>
+        protected bool IsApiVersionNeutral => versionNeutral.Value;
 
         /// <summary>
         /// Gets the options associated with the API explorer.
@@ -78,20 +88,29 @@
         /// <param name="location">One of the <see cref="ApiVersionParameterLocation"/> values.</param>
         public virtual void AddParameter( string name, ApiVersionParameterLocation location )
         {
+            Action<string> add;
+
             switch ( location )
             {
                 case Query:
-                    AddQueryString( name );
+                    add = AddQueryString;
                     break;
                 case Header:
-                    AddHeader( name );
+                    add = AddHeader;
                     break;
                 case Path:
                     UpdateUrlSegment();
-                    break;
+                    return;
                 case MediaTypeParameter:
-                    AddMediaTypeParameter( name );
+                    add = AddMediaTypeParameter;
                     break;
+                default:
+                    return;
+            }
+
+            if ( Options.AddApiVersionParametersWhenVersionNeutral || !IsApiVersionNeutral )
+            {
+                add( name );
             }
         }
 
@@ -101,8 +120,6 @@
         /// <param name="name">The name of the query string parameter.</param>
         protected virtual void AddQueryString( string name )
         {
-            Arg.NotNullOrEmpty( name, nameof( name ) );
-
             if ( !HasPathParameter )
             {
                 ApiDescription.ParameterDescriptions.Add( NewApiVersionParameter( name, FromUri ) );
@@ -115,8 +132,6 @@
         /// <param name="name">The name of the header.</param>
         protected virtual void AddHeader( string name )
         {
-            Arg.NotNullOrEmpty( name, nameof( name ) );
-
             if ( !HasPathParameter )
             {
                 ApiDescription.ParameterDescriptions.Add( NewApiVersionParameter( name, Unknown ) );
@@ -128,7 +143,17 @@
         /// </summary>
         protected virtual void UpdateUrlSegment()
         {
-            var parameter = ApiDescription.ParameterDescriptions.FirstOrDefault( p => p.Source == FromUri && p.ParameterDescriptor == null );
+            // use the route constraints to determine the user-defined name of the route parameter; expect and support only one
+            var constraints = ApiDescription.Route.Constraints;
+            var routeParameterName = constraints.Where( p => p.Value is ApiVersionRouteConstraint ).Select( p => p.Key ).FirstOrDefault();
+
+            if ( string.IsNullOrEmpty( routeParameterName ) )
+            {
+                return;
+            }
+
+            // find and update the parameter description for the api version route parameter
+            var parameter = ApiDescription.ParameterDescriptions.FirstOrDefault( p => routeParameterName.Equals( p.Name, OrdinalIgnoreCase ) );
 
             if ( parameter == null )
             {
@@ -143,6 +168,7 @@
                 Configuration = action.Configuration,
                 ActionDescriptor = action,
             };
+
             RemoveAllParametersExcept( parameter );
         }
 
@@ -152,8 +178,6 @@
         /// <param name="name">The name of the media type parameter.</param>
         protected virtual void AddMediaTypeParameter( string name )
         {
-            Arg.NotNullOrEmpty( name, nameof( name ) );
-
             var parameter = new NameValueHeaderValue( name, ApiVersion.ToString() );
 
             CloneFormattersAndAddMediaTypeParameter( parameter, ApiDescription.SupportedRequestBodyFormatters );
@@ -166,9 +190,6 @@
 
         ApiParameterDescription NewApiVersionParameter( string name, ApiParameterSource source, bool allowOptional )
         {
-            Contract.Requires( !string.IsNullOrEmpty( name ) );
-            Contract.Ensures( Contract.Result<ApiParameterDescription>() != null );
-
             var action = ApiDescription.ActionDescriptor;
             var parameter = new ApiParameterDescription()
             {
@@ -190,7 +211,7 @@
 
         void RemoveAllParametersExcept( ApiParameterDescription parameter )
         {
-            // note: in a scenario where multiple api version parameters are allowed, we can remove all other parameters because
+            // in a scenario where multiple api version parameters are allowed, we can remove all other parameters because
             // the api version must be specified in the path. this will avoid unwanted, duplicate api version parameters
             var collections = new ICollection<ApiParameterDescription>[] { ApiDescription.ParameterDescriptions, parameters };
 
@@ -210,9 +231,6 @@
 
         static void CloneFormattersAndAddMediaTypeParameter( NameValueHeaderValue parameter, ICollection<MediaTypeFormatter> formatters )
         {
-            Contract.Requires( parameter != null );
-            Contract.Requires( formatters != null );
-
             var originalFormatters = formatters.ToArray();
 
             formatters.Clear();

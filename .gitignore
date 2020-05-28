@@ -20,6 +20,7 @@ x86/
 [Bb]in/
 [Oo]bj/
 [Ff]akes[Aa]ssemblies/
+*.binlog
 
 # ignore nuget packages folder
 /packages
@@ -46,3 +47,8 @@ artifacts/
 _ReSharper*/
 *.[Rr]e[Ss]harper
 *.DotSettings.user
+
+# NCrunch folders and files
+_NCrunch_*/
+_NCrunch_*
+*.ncrunch*

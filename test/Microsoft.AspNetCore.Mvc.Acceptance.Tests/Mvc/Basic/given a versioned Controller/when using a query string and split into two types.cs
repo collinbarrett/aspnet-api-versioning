@@ -10,7 +10,8 @@
     using Xunit;
     using static System.Net.HttpStatusCode;
 
-    public class when_using_a_query_string_and_split_into_two_types : BasicAcceptanceTest
+    [Collection( nameof( BasicCollection ) )]
+    public class when_using_a_query_string_and_split_into_two_types : AcceptanceTest
     {
         [Theory]
         [InlineData( nameof( ValuesController ), "1.0" )]
@@ -26,7 +27,7 @@
 
             // assert
             response.Headers.GetValues( "api-supported-versions" ).Single().Should().Be( "1.0, 2.0" );
-            content.Should().BeEquivalentTo( new { controller = controller, version = apiVersion } );
+            content.Should().BeEquivalentTo( new { controller, version = apiVersion } );
         }
 
         [Fact]
@@ -57,6 +58,35 @@
             // assert
             response.Headers.GetValues( "api-supported-versions" ).Single().Should().Be( "1.0, 2.0" );
             content.Should().BeEquivalentTo( new { controller = nameof( Values2Controller ), id = 42, version = "2.0" } );
+        }
+
+        [Fact]
+        public async Task then_get_returns_400_or_405_with_invalid_id()
+        {
+            // arrange
+            var requestUrl = "api/values/abc?api-version=2.0";
+            var statusCode = UsingEndpointRouting ? NotFound : BadRequest;
+
+            // act
+            var response = await GetAsync( requestUrl );
+
+            // assert
+            response.StatusCode.Should().Be( statusCode );
+        }
+
+        [Theory]
+        [InlineData( "1.0" )]
+        [InlineData( "2.0" )]
+        public async Task then_delete_should_return_405( string apiVersion )
+        {
+            // arrange
+            var requestUrl = $"api/values/42?api-version={apiVersion}";
+
+            // act
+            var response = await DeleteAsync( requestUrl );
+
+            // assert
+            response.StatusCode.Should().Be( MethodNotAllowed );
         }
 
         [Fact]
@@ -103,7 +133,15 @@
 
             // assert
             response.Headers.GetValues( "api-supported-versions" ).Single().Should().Be( "1.0, 2.0" );
-            content.Should().BeEquivalentTo( new { controller = controller, query = "Foo", version = apiVersion } );
+            content.Should().BeEquivalentTo( new { controller, query = "Foo", version = apiVersion } );
         }
+
+        public when_using_a_query_string_and_split_into_two_types( BasicFixture fixture ) : base( fixture ) { }
+    }
+
+    [Collection( nameof( BasicEndpointCollection ) )]
+    public class when_using_a_query_string_and_split_into_two_types_ : when_using_a_query_string_and_split_into_two_types
+    {
+        public when_using_a_query_string_and_split_into_two_types_( BasicEndpointFixture fixture ) : base( fixture ) { }
     }
 }

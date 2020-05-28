@@ -1,23 +1,17 @@
 ﻿namespace Microsoft.AspNetCore.Mvc.Versioning
 {
-    using Microsoft.AspNet.OData;
     using Microsoft.AspNet.OData.Extensions;
     using Microsoft.AspNet.OData.Routing;
     using Microsoft.AspNetCore.Mvc.Abstractions;
     using Microsoft.AspNetCore.Mvc.ActionConstraints;
-    using Microsoft.AspNetCore.Mvc.Controllers;
     using Microsoft.AspNetCore.Mvc.Infrastructure;
-    using Microsoft.AspNetCore.Mvc.Internal;
     using Microsoft.AspNetCore.Mvc.Routing;
     using Microsoft.AspNetCore.Routing;
     using Microsoft.Extensions.Logging;
     using Microsoft.Extensions.Options;
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics;
-    using System.Diagnostics.Contracts;
     using System.Linq;
-    using static Microsoft.AspNetCore.Mvc.ModelBinding.BindingSource;
 
     /// <summary>
     /// Represents the logic for selecting an API-versioned, action method with additional support for OData actions.
@@ -29,16 +23,16 @@
         /// Initializes a new instance of the <see cref="ODataApiVersionActionSelector"/> class.
         /// </summary>
         /// <param name="actionDescriptorCollectionProvider">The <see cref="IActionDescriptorCollectionProvider "/> used to select candidate routes.</param>
-        /// <param name="actionConstraintCache">The <see cref="ActionConstraintCache"/> that providers a set of <see cref="IActionConstraint"/> instances.</param>
+        /// <param name="actionConstraintProviders">The <see cref="IEnumerable{T}">sequence</see> of <see cref="IActionConstraintProvider">action constraint providers</see>.</param>
         /// <param name="options">The <see cref="ApiVersioningOptions">options</see> associated with the action selector.</param>
         /// <param name="loggerFactory">The <see cref="ILoggerFactory"/>.</param>
         /// <param name="routePolicy">The <see cref="IApiVersionRoutePolicy">route policy</see> applied to candidate matches.</param>
         public ODataApiVersionActionSelector(
             IActionDescriptorCollectionProvider actionDescriptorCollectionProvider,
-            ActionConstraintCache actionConstraintCache,
+            IEnumerable<IActionConstraintProvider> actionConstraintProviders,
             IOptions<ApiVersioningOptions> options,
             ILoggerFactory loggerFactory,
-            IApiVersionRoutePolicy routePolicy ) : base( actionDescriptorCollectionProvider, actionConstraintCache, options, loggerFactory, routePolicy ) { }
+            IApiVersionRoutePolicy routePolicy ) : base( actionDescriptorCollectionProvider, actionConstraintProviders, options, loggerFactory, routePolicy ) { }
 
         /// <summary>
         /// Selects a list of candidate actions from the specified route context.
@@ -47,7 +41,10 @@
         /// <returns>A <see cref="IReadOnlyList{T}">read-only list</see> of candidate <see cref="ActionDescriptor">actions</see>.</returns>
         public override IReadOnlyList<ActionDescriptor> SelectCandidates( RouteContext context )
         {
-            Arg.NotNull( context, nameof( context ) );
+            if ( context == null )
+            {
+                throw new ArgumentNullException( nameof( context ) );
+            }
 
             var odataPath = context.HttpContext.ODataFeature().Path;
             var routeValues = context.RouteData.Values;
@@ -123,10 +120,17 @@
         /// <param name="context">The current <see cref="RouteContext">route context</see> to evaluate.</param>
         /// <param name="candidates">The <see cref="IReadOnlyList{T}">read-only list</see> of candidate <see cref="ActionDescriptor">actions</see> to select from.</param>
         /// <returns>The best candidate <see cref="ActionDescriptor">action</see> or <c>null</c> if no candidate matches.</returns>
-        public override ActionDescriptor SelectBestCandidate( RouteContext context, IReadOnlyList<ActionDescriptor> candidates )
+        public override ActionDescriptor? SelectBestCandidate( RouteContext context, IReadOnlyList<ActionDescriptor> candidates )
         {
-            Arg.NotNull( context, nameof( context ) );
-            Arg.NotNull( candidates, nameof( candidates ) );
+            if ( context == null )
+            {
+                throw new ArgumentNullException( nameof( context ) );
+            }
+
+            if ( candidates == null )
+            {
+                throw new ArgumentNullException( nameof( candidates ) );
+            }
 
             var httpContext = context.HttpContext;
             var odataRouteCandidate = httpContext.ODataFeature().Path != null;
@@ -144,18 +148,19 @@
             var matches = EvaluateActionConstraints( context, candidates );
             var selectionContext = new ActionSelectionContext( httpContext, matches, apiVersion );
             var bestActions = SelectBestActions( selectionContext );
-            var finalMatch = bestActions.Select( action => new ActionCandidate( action ) )
-                                        .OrderByDescending( candidate => candidate.FilteredParameters.Count )
-                                        .ThenByDescending( candidate => candidate.TotalParameterCount )
-                                        .FirstOrDefault()?.Action;
-            IReadOnlyList<ActionDescriptor> finalMatches = finalMatch == null ? Array.Empty<ActionDescriptor>() : new[] { finalMatch };
+            var finalMatches = bestActions.Select( action => new ActionCandidate( action ) )
+                                          .OrderByDescending( candidate => candidate.FilteredParameters.Count )
+                                          .ThenByDescending( candidate => candidate.TotalParameterCount )
+                                          .Take( 1 )
+                                          .Select( candidate => candidate.Action )
+                                          .ToArray();
             var feature = httpContext.Features.Get<IApiVersioningFeature>();
             var selectionResult = feature.SelectionResult;
 
             feature.RequestedApiVersion = selectionContext.RequestedVersion;
             selectionResult.AddCandidates( candidates );
 
-            if ( finalMatches.Count == 0 )
+            if ( finalMatches.Length == 0 )
             {
                 return null;
             }
@@ -163,36 +168,6 @@
             selectionResult.AddMatches( finalMatches );
 
             return RoutePolicy.Evaluate( context, selectionResult );
-        }
-
-        [DebuggerDisplay( "{Action.DisplayName,nq}" )]
-        sealed class ActionCandidate
-        {
-            internal ActionCandidate( ActionDescriptor action )
-            {
-                Contract.Requires( action != null );
-
-                var filteredParameters = new List<string>( action.Parameters.Count );
-
-                foreach ( var parameter in action.Parameters )
-                {
-                    if ( parameter.ParameterType.IsModelBound() || parameter.BindingInfo?.BindingSource != Path )
-                    {
-                        continue;
-                    }
-
-                    filteredParameters.Add( parameter.Name );
-                }
-
-                Action = action;
-                FilteredParameters = filteredParameters;
-            }
-
-            internal ActionDescriptor Action { get; }
-
-            internal int TotalParameterCount => Action.Parameters.Count;
-
-            internal IReadOnlyList<string> FilteredParameters { get; }
         }
     }
 }

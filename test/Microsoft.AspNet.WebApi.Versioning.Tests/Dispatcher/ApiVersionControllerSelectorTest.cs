@@ -15,13 +15,14 @@
     using System.Web.Http.Controllers;
     using System.Web.Http.Dispatcher;
     using System.Web.Http.Routing;
-    using Versioning;
-    using Versioning.Conventions;
+    using Microsoft.Web.Http.Versioning;
+    using Microsoft.Web.Http.Versioning.Conventions;
     using Xunit;
     using static System.Net.Http.HttpMethod;
     using static System.Net.HttpStatusCode;
     using static System.Web.Http.IncludeErrorDetailPolicy;
     using static System.Web.Http.RouteParameter;
+    using static Microsoft.Web.Http.Versioning.ApiVersionMapping;
 
     public partial class ApiVersionControllerSelectorTest
     {
@@ -91,7 +92,6 @@
         public void select_controller_should_return_correct_versionedX2C_attributeX2Dbased_controller( string version, Type controllerType )
         {
             // arrange
-            var supportedVersions = new[] { new ApiVersion( 1, 0 ), new ApiVersion( 2, 0 ), new ApiVersion( 3, 0 ), new ApiVersion( 4, 0 ) };
             var configuration = AttributeRoutingEnabledConfiguration;
             var request = new HttpRequestMessage( Get, "http://localhost/api/test?api-version=" + version );
 
@@ -110,7 +110,6 @@
 
             // assert
             controller.ControllerType.Should().Be( controllerType );
-            controller.GetSupportedApiVersions().Should().BeEquivalentTo( supportedVersions );
         }
 
         [Theory]
@@ -120,7 +119,6 @@
         public void select_controller_should_return_correct_versionedX2C_conventionX2Dbased_controller( string version, Type controllerType )
         {
             // arrange
-            var supportedVersions = new[] { new ApiVersion( 1, 0 ), new ApiVersion( 2, 0 ), new ApiVersion( 3, 0 ) };
             var configuration = new HttpConfiguration();
             var request = new HttpRequestMessage( Get, "http://localhost/api/test?api-version=" + version );
 
@@ -140,7 +138,6 @@
 
             // assert
             controller.ControllerType.Should().Be( controllerType );
-            controller.GetSupportedApiVersions().Should().BeEquivalentTo( supportedVersions );
         }
 
         [Theory]
@@ -202,8 +199,8 @@
         public async Task select_controller_should_return_400_for_unmatchedX2C_attributeX2Dbased_controller_version()
         {
             // arrange
-            var message = "The HTTP resource that matches the request URI 'http://localhost/api/test?api-version=42.0' does not support the API version '42.0'.";
-            var messageDetail = "No route providing a controller name with API version '42.0' was found to match request URI 'http://localhost/api/test?api-version=42.0'.";
+            var message = "The HTTP resource that matches the request URI 'http://localhost/api/test' does not support the API version '42.0'.";
+            var messageDetail = "No route providing a controller name with API version '42.0' was found to match request URI 'http://localhost/api/test'.";
             var configuration = AttributeRoutingEnabledConfiguration;
             var request = new HttpRequestMessage( Get, "http://localhost/api/test?api-version=42.0" );
 
@@ -286,8 +283,8 @@
         public async Task select_controller_should_return_400_for_unmatchedX2C_conventionX2Dbased_controller_version()
         {
             // arrange
-            var message = "The HTTP resource that matches the request URI 'http://localhost/api/test?api-version=4.0' does not support the API version '4.0'.";
-            var messageDetail = "No route providing a controller name with API version '4.0' was found to match request URI 'http://localhost/api/test?api-version=4.0'.";
+            var message = "The HTTP resource that matches the request URI 'http://localhost/api/test' does not support the API version '4.0'.";
+            var messageDetail = "No route providing a controller name with API version '4.0' was found to match request URI 'http://localhost/api/test'.";
             var configuration = new HttpConfiguration();
             var request = new HttpRequestMessage( Get, "http://localhost/api/test?api-version=4.0" );
 
@@ -373,8 +370,10 @@
         [InlineData( "http://localhost/api/random?api-version=10.0" )]
         public async Task select_controller_should_return_404_for_unmatched_controller( string requestUri )
         {
+            var uri = new Uri( requestUri );
+            var safeUrl = string.IsNullOrWhiteSpace( uri.Query ) ? uri.AbsoluteUri : uri.AbsoluteUri.Replace( uri.Query, string.Empty );
             // arrange
-            var message = "No HTTP resource was found that matches the request URI '" + requestUri + "'.";
+            var message = "No HTTP resource was found that matches the request URI '" + safeUrl + "'.";
             var messageDetail = "No type was found that matches the controller named 'random'.";
             var configuration = AttributeRoutingEnabledConfiguration;
             var request = new HttpRequestMessage( Get, requestUri );
@@ -919,16 +918,16 @@ Microsoft.Web.Http.Dispatcher.ApiVersionControllerSelectorTest+AmbiguousNeutralC
         }
 
         [Theory]
-        [InlineData( "v1", typeof( ApiVersionedRouteController ), "Get", "1.0,2.0,3.0" )]
-        [InlineData( "v1.0", typeof( ApiVersionedRouteController ), "Get", "1.0,2.0,3.0" )]
-        [InlineData( "v2", typeof( ApiVersionedRouteController ), "Get", "1.0,2.0,3.0" )]
-        [InlineData( "v3.0", typeof( ApiVersionedRouteController ), "Get", "1.0,2.0,3.0" )]
-        [InlineData( "v4", typeof( ApiVersionedRoute2Controller ), "GetV4", "4.0,5.0" )]
-        [InlineData( "v5", typeof( ApiVersionedRoute2Controller ), "Get", "4.0,5.0" )]
-        public void select_controller_should_return_correct_controller_for_versioned_url( string versionSegment, Type controllerType, string actionName, string declaredVersionsValue )
+        [InlineData( "v1", typeof( ApiVersionedRouteController ), "Get", null, Implicit )]
+        [InlineData( "v1.0", typeof( ApiVersionedRouteController ), "Get", null, Implicit )]
+        [InlineData( "v2", typeof( ApiVersionedRouteController ), "Get", null, Implicit )]
+        [InlineData( "v3.0", typeof( ApiVersionedRouteController ), "Get", null, Implicit )]
+        [InlineData( "v4", typeof( ApiVersionedRoute2Controller ), "GetV4", "4.0", Explicit )]
+        [InlineData( "v5", typeof( ApiVersionedRoute2Controller ), "Get", null, Implicit )]
+        public void select_controller_should_return_correct_controller_for_versioned_url( string versionSegment, Type controllerType, string actionName, string declaredVersionsValue, ApiVersionMapping mapping )
         {
             // arrange
-            var declared = declaredVersionsValue.Split( ',' ).Select( v => ApiVersion.Parse( v ) );
+            var declared = string.IsNullOrEmpty( declaredVersionsValue ) ? new ApiVersion[0] : declaredVersionsValue.Split( ',' ).Select( v => ApiVersion.Parse( v ) );
             var supported = new[] { new ApiVersion( 1, 0 ), new ApiVersion( 2, 0 ), new ApiVersion( 3, 0 ), new ApiVersion( 5, 0 ) };
             var deprecated = new[] { new ApiVersion( 4, 0 ) };
             var implemented = supported.Union( deprecated ).OrderBy( v => v ).ToArray();
@@ -962,7 +961,7 @@ Microsoft.Web.Http.Dispatcher.ApiVersionControllerSelectorTest+AmbiguousNeutralC
             // assert
             controller.ControllerType.Should().Be( controllerType );
             action.ActionName.Should().Be( actionName );
-            controller.GetApiVersionModel().Should().BeEquivalentTo(
+            action.GetApiVersionModel().Should().BeEquivalentTo(
                 new
                 {
                     IsApiVersionNeutral = false,
@@ -971,6 +970,7 @@ Microsoft.Web.Http.Dispatcher.ApiVersionControllerSelectorTest+AmbiguousNeutralC
                     SupportedApiVersions = supported,
                     DeprecatedApiVersions = deprecated
                 } );
+            action.MappingTo( request.ApiVersionProperties().RequestedApiVersion ).Should().Be( mapping );
         }
 
         [Fact]
@@ -1059,7 +1059,6 @@ Microsoft.Web.Http.Dispatcher.ApiVersionControllerSelectorTest+AmbiguousNeutralC
         public void select_controller_should_resolve_controller_using_api_versioning_conventions()
         {
             // arrange
-            var supportedVersions = new[] { new ApiVersion( 2, 0 ), new ApiVersion( 3, 0 ) };
             var controllerType = typeof( TestController );
             var controllerTypeResolver = new Mock<IHttpControllerTypeResolver>();
             var controllerTypes = new Collection<Type>() { controllerType };
@@ -1084,7 +1083,6 @@ Microsoft.Web.Http.Dispatcher.ApiVersionControllerSelectorTest+AmbiguousNeutralC
 
             // assert
             controller.ControllerType.Should().Be( controllerType );
-            controller.GetSupportedApiVersions().Should().BeEquivalentTo( supportedVersions );
         }
 
         [Fact]
@@ -1166,13 +1164,15 @@ Microsoft.Web.Http.Dispatcher.ApiVersionControllerSelectorTest+AmbiguousNeutralC
 
             // act
             var controller = selector.SelectController( request );
+            var context = new HttpControllerContext( configuration, routeData, request ) { ControllerDescriptor = controller };
+            var action = configuration.Services.GetActionSelector().SelectAction( context );
 
             // assert
-            controller.GetApiVersionModel().Should().BeEquivalentTo(
+            action.GetApiVersionModel().Should().BeEquivalentTo(
                 new
                 {
                     IsApiVersionNeutral = false,
-                    DeclaredApiVersions = new[] { new ApiVersion( 1, 0 ), new ApiVersion( 2, 0 ) },
+                    DeclaredApiVersions = new ApiVersion[0],
                     SupportedApiVersions = new[] { new ApiVersion( 1, 0 ), new ApiVersion( 2, 0 ), new ApiVersion( 3, 0 ) },
                     DeprecatedApiVersions = new ApiVersion[0],
                     ImplementedApiVersions = new[] { new ApiVersion( 1, 0 ), new ApiVersion( 2, 0 ), new ApiVersion( 3, 0 ) }

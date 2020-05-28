@@ -2,44 +2,44 @@
 {
     using Microsoft.AspNet.OData.Routing.Template;
     using Microsoft.AspNetCore.Mvc.Abstractions;
-    using Microsoft.AspNetCore.Mvc.ApplicationModels;
-    using Microsoft.AspNetCore.Mvc.ApplicationParts;
     using Microsoft.AspNetCore.Mvc.Controllers;
     using Microsoft.AspNetCore.Mvc.ModelBinding;
     using Microsoft.AspNetCore.Mvc.Routing;
     using Microsoft.AspNetCore.Mvc.Versioning;
+    using Microsoft.Extensions.Options;
     using Microsoft.OData.Edm;
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Linq;
-    using System.Reflection;
     using static Microsoft.AspNet.OData.Routing.ODataRouteActionType;
     using static Microsoft.AspNetCore.Mvc.ModelBinding.BindingSource;
+    using static Microsoft.AspNetCore.Mvc.Versioning.ApiVersionMapping;
     using static System.Linq.Enumerable;
     using static System.StringComparison;
 
     sealed class ODataRouteBindingInfoConvention : IODataActionDescriptorConvention
     {
-        readonly IEnumerable<Assembly> assemblies;
+        readonly IOptions<ODataApiVersioningOptions> options;
 
-        internal ODataRouteBindingInfoConvention( IODataRouteCollectionProvider routeCollectionProvider, ApplicationPartManager partManager )
+        internal ODataRouteBindingInfoConvention(
+            IODataRouteCollectionProvider routeCollectionProvider,
+            IModelMetadataProvider modelMetadataProvider,
+            IOptions<ODataApiVersioningOptions> options )
         {
-            Contract.Requires( routeCollectionProvider != null );
-            Contract.Requires( partManager != null );
-
             RouteCollectionProvider = routeCollectionProvider;
-            assemblies = partManager.ApplicationParts.OfType<AssemblyPart>().Select( p => p.Assembly ).ToArray();
+            ModelMetadataProvider = modelMetadataProvider;
+            this.options = options;
         }
 
         IODataRouteCollectionProvider RouteCollectionProvider { get; }
 
+        IModelMetadataProvider ModelMetadataProvider { get; }
+
+        ODataApiVersioningOptions Options => options.Value;
+
         public void Apply( ActionDescriptorProviderContext context, ControllerActionDescriptor action )
         {
-            Contract.Requires( context != null );
-            Contract.Requires( action != null );
-
-            var model = GetModel( action );
+            var model = action.GetApiVersionModel( Explicit | Implicit );
             var mappings = RouteCollectionProvider.Items;
             var routeInfos = new HashSet<ODataAttributeRouteInfo>( new ODataAttributeRouteInfoComparer() );
 
@@ -52,7 +52,7 @@
                     return;
                 }
 
-                // note: any mapping will do for a version-neutral action; just take the first one
+                // any mapping will do for a version-neutral action; just take the first one
                 var mapping = mappings[0];
 
                 UpdateBindingInfo( action, mapping, routeInfos );
@@ -66,7 +66,7 @@
                         continue;
                     }
 
-                    foreach ( var mapping in mappingsPerApiVersion )
+                    foreach ( var mapping in mappingsPerApiVersion! )
                     {
                         UpdateBindingInfo( action, mapping, routeInfos );
                     }
@@ -78,45 +78,26 @@
                 return;
             }
 
-            using ( var iterator = routeInfos.GetEnumerator() )
+            using var iterator = routeInfos.GetEnumerator();
+
+            iterator.MoveNext();
+            action.AttributeRouteInfo = iterator.Current;
+
+            while ( iterator.MoveNext() )
             {
-                iterator.MoveNext();
-                action.AttributeRouteInfo = iterator.Current;
-
-                while ( iterator.MoveNext() )
-                {
-                    context.Results.Add( Clone( action, iterator.Current ) );
-                }
+                context.Results.Add( Clone( action, iterator.Current ) );
             }
-        }
-
-        static ApiVersionModel GetModel( ControllerActionDescriptor action )
-        {
-            Contract.Requires( action != null );
-
-            var model = action.GetProperty<ApiVersionModel>();
-
-            if ( model == null || model.DeclaredApiVersions.Count == 0 )
-            {
-                model = action.GetProperty<ControllerModel>()?.GetProperty<ApiVersionModel>();
-            }
-
-            return model;
         }
 
         void UpdateBindingInfo( ControllerActionDescriptor action, ODataRouteMapping mapping, ICollection<ODataAttributeRouteInfo> routeInfos )
         {
-            Contract.Requires( action != null );
-            Contract.Requires( mapping != null );
-            Contract.Requires( routeInfos != null );
-
-            var routeContext = new ODataRouteBuilderContext( assemblies, mapping, action );
+            var routeContext = new ODataRouteBuilderContext( mapping, action, Options );
             var routeBuilder = new ODataRouteBuilder( routeContext );
             var parameterContext = new ActionParameterContext( routeBuilder, routeContext );
 
-            foreach ( var parameter in action.Parameters )
+            for ( var i = 0; i < action.Parameters.Count; i++ )
             {
-                UpdateBindingInfo( parameterContext, parameter );
+                UpdateBindingInfo( parameterContext, action.Parameters[i] );
             }
 
             var routeInfo = new ODataAttributeRouteInfo()
@@ -128,32 +109,32 @@
             routeInfos.Add( routeInfo );
         }
 
-        static void UpdateBindingInfo( ActionParameterContext context, ParameterDescriptor parameter )
+        void UpdateBindingInfo( ActionParameterContext context, ParameterDescriptor parameter )
         {
-            Contract.Requires( context != null );
-            Contract.Requires( parameter != null );
-
+            var parameterType = parameter.ParameterType;
             var bindingInfo = parameter.BindingInfo;
 
-            if ( bindingInfo != null && bindingInfo.BindingSource != Custom )
+            if ( bindingInfo != null )
             {
+                if ( ( parameterType.IsODataQueryOptions() || parameterType.IsODataPath() ) && bindingInfo.BindingSource == Custom )
+                {
+                    bindingInfo.BindingSource = Special;
+                }
+
                 return;
             }
 
-            bindingInfo = parameter.BindingInfo ?? new BindingInfo();
+            var metadata = ModelMetadataProvider.GetMetadataForType( parameterType );
 
-            var paramType = parameter.ParameterType;
+            parameter.BindingInfo = bindingInfo = new BindingInfo() { BindingSource = metadata.BindingSource };
 
-            if ( paramType.IsODataQueryOptions() || paramType.IsODataPath() )
+            if ( bindingInfo.BindingSource != null )
             {
-                bindingInfo.BindingSource = ModelBinding;
-                parameter.BindingInfo = bindingInfo;
-                return;
-            }
-            else if ( paramType.IsDelta() )
-            {
-                bindingInfo.BindingSource = Body;
-                parameter.BindingInfo = bindingInfo;
+                if ( ( parameterType.IsODataQueryOptions() || parameterType.IsODataPath() ) && bindingInfo.BindingSource == Custom )
+                {
+                    bindingInfo.BindingSource = Special;
+                }
+
                 return;
             }
 
@@ -199,25 +180,18 @@
                         break;
                     }
 
-                    if ( paramType.IsODataActionParameters() )
+                    key = operation.Parameters.FirstOrDefault( p => p.Name.Equals( paramName, OrdinalIgnoreCase ) );
+
+                    if ( key == null )
                     {
-                        source = Body;
+                        if ( operation.IsBound )
+                        {
+                            goto case EntitySet;
+                        }
                     }
                     else
                     {
-                        key = operation.Parameters.FirstOrDefault( p => p.Name.Equals( paramName, OrdinalIgnoreCase ) );
-
-                        if ( key == null )
-                        {
-                            if ( operation.IsBound )
-                            {
-                                goto case EntitySet;
-                            }
-                        }
-                        else
-                        {
-                            source = Path;
-                        }
+                        source = Path;
                     }
 
                     break;
@@ -229,10 +203,6 @@
 
         static ControllerActionDescriptor Clone( ControllerActionDescriptor action, AttributeRouteInfo attributeRouteInfo )
         {
-            Contract.Requires( action != null );
-            Contract.Requires( attributeRouteInfo != null );
-            Contract.Ensures( Contract.Result<ControllerActionDescriptor>() != null );
-
             var clone = new ControllerActionDescriptor()
             {
                 ActionConstraints = action.ActionConstraints,
@@ -254,8 +224,6 @@
 
         static void UpdateControllerName( ControllerActionDescriptor action )
         {
-            Contract.Requires( action != null );
-
             if ( !action.RouteValues.TryGetValue( "controller", out var key ) )
             {
                 key = action.ControllerName;

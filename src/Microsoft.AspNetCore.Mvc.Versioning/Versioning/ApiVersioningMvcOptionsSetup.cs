@@ -1,5 +1,7 @@
 ﻿namespace Microsoft.AspNetCore.Mvc.Versioning
 {
+    using Microsoft.AspNetCore.Mvc.ModelBinding;
+    using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
     using Microsoft.Extensions.Options;
     using System;
 
@@ -20,6 +22,11 @@
         /// <inheritdoc />
         public virtual void PostConfigure( string name, MvcOptions options )
         {
+            if ( options == null )
+            {
+                throw new ArgumentNullException( nameof( options ) );
+            }
+
             var value = versioningOptions.Value;
 
             if ( value.ReportApiVersions )
@@ -27,6 +34,15 @@
                 options.Filters.AddService<ReportApiVersionsAttribute>();
             }
 
+            if ( value.ApiVersionReader.VersionsByMediaType() )
+            {
+                options.Filters.AddService<ApplyContentTypeVersionActionFilter>();
+            }
+
+            var modelMetadataDetailsProviders = options.ModelMetadataDetailsProviders;
+
+            modelMetadataDetailsProviders.Insert( 0, new SuppressChildValidationMetadataProvider( typeof( ApiVersion ) ) );
+            modelMetadataDetailsProviders.Insert( 0, new BindingSourceMetadataProvider( typeof( ApiVersion ), BindingSource.Special ) );
             options.ModelBinderProviders.Insert( 0, new ApiVersionModelBinderProvider() );
         }
     }

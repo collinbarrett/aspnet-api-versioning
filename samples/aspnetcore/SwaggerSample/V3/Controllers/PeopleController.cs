@@ -8,18 +8,18 @@
     /// <summary>
     /// Represents a RESTful people service.
     /// </summary>
+    [ApiController]
     [ApiVersion( "3.0" )]
-    [Route( "api/v{api-version:apiVersion}/[controller]" )]
-    public class PeopleController : Controller
+    [Route( "api/v{version:apiVersion}/[controller]" )]
+    public class PeopleController : ControllerBase
     {
-        const string ByIdRouteName = "GetPersonById" + nameof( V3 );
-
         /// <summary>
         /// Gets all people.
         /// </summary>
         /// <returns>All available people.</returns>
         /// <response code="200">The successfully retrieved people.</response>
         [HttpGet]
+        [Produces( "application/json" )]
         [ProducesResponseType( typeof( IEnumerable<Person> ), 200 )]
         public IActionResult Get()
         {
@@ -61,40 +61,37 @@
         /// <returns>The requested person.</returns>
         /// <response code="200">The person was successfully retrieved.</response>
         /// <response code="404">The person does not exist.</response>
-        [HttpGet( "{id:int}", Name = ByIdRouteName )]
+        [HttpGet( "{id:int}" )]
+        [Produces( "application/json" )]
         [ProducesResponseType( typeof( Person ), 200 )]
         [ProducesResponseType( 404 )]
         public IActionResult Get( int id ) =>
             Ok( new Person()
-                {
-                    Id = id,
-                    FirstName = "John",
-                    LastName = "Doe",
-                    Email = "john.doe@somewhere.com",
-                    Phone = "555-987-1234"
-                }
+            {
+                Id = id,
+                FirstName = "John",
+                LastName = "Doe",
+                Email = "john.doe@somewhere.com",
+                Phone = "555-987-1234"
+            }
             );
 
         /// <summary>
         /// Creates a new person.
         /// </summary>
         /// <param name="person">The person to create.</param>
+        /// <param name="apiVersion">The requested API version.</param>
         /// <returns>The created person.</returns>
         /// <response code="201">The person was successfully created.</response>
         /// <response code="400">The person was invalid.</response>
         [HttpPost]
+        [Produces( "application/json" )]
         [ProducesResponseType( typeof( Person ), 201 )]
         [ProducesResponseType( 400 )]
-        public IActionResult Post( [FromBody] Person person )
+        public IActionResult Post( [FromBody] Person person, ApiVersion apiVersion )
         {
-            if ( !ModelState.IsValid )
-            {
-                return BadRequest( ModelState );
-            }
-
             person.Id = 42;
-
-            return CreatedAtRoute( ByIdRouteName, new { id = person.Id }, person );
+            return CreatedAtAction( nameof( Get ), new { id = person.Id, version = apiVersion.ToString() }, person );
         }
     }
 }

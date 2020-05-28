@@ -5,6 +5,8 @@ namespace Microsoft.AspNetCore.Mvc.ApiExplorer
 #endif
 {
     using Microsoft.AspNet.OData;
+    using Microsoft.AspNet.OData.Builder;
+    using System;
 #if WEBAPI
     using System.Web.Http;
     using System.Web.Http.Description;
@@ -29,9 +31,27 @@ namespace Microsoft.AspNetCore.Mvc.ApiExplorer
         public bool UseApiExplorerSettings { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether qualified names are used when building URLs for operations (e.g. actions and functions).
+        /// Gets or sets a value indicating whether qualified names are used when building URLs.
         /// </summary>
-        /// <value>True if qualified names are used when building URLs for operations; otherwise, false. The default value is <c>false</c>.</value>
-        public bool UseQualifiedOperationNames { get; set; }
+        /// <value>True if qualified names are used when building URLs; otherwise, false. The default value is <c>false</c>.</value>
+        public bool UseQualifiedNames { get; set; }
+
+        /// <summary>
+        /// Gets or sets the default description used for OData related entity links.
+        /// </summary>
+        /// <value>The default description for OData related entity links. The default value
+        /// is "The identifier of the related entity".</value>
+        /// <remarks>OData related entity links appear in $ref requests. This description is used to describe dynamic parameters
+        /// such as the $id query parameter.</remarks>
+        public string RelatedEntityIdParameterDescription { get; set; } = SR.RelatedEntityIdParamDesc;
+
+        /// <summary>
+        /// Gets or sets the convention builder used to describe OData query options.
+        /// </summary>
+        /// <value>An <see cref="ODataActionQueryOptionsConventionBuilder">OData query option convention builder</see>.</value>
+#if !WEBAPI
+        [CLSCompliant( false )]
+#endif
+        public ODataQueryOptionsConventionBuilder QueryOptions { get; set; } = new ODataQueryOptionsConventionBuilder();
     }
 }

@@ -7,13 +7,11 @@
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Linq;
     using System.Net.Http;
     using System.Web.Http;
     using System.Web.Http.Controllers;
     using System.Web.Http.Dispatcher;
-    using static Controllers.HttpControllerDescriptorComparer;
     using static System.StringComparer;
     using static Versioning.ErrorCodes;
 
@@ -36,9 +34,6 @@
         /// associated with the controller selector.</param>
         public ApiVersionControllerSelector( HttpConfiguration configuration, ApiVersioningOptions options )
         {
-            Arg.NotNull( configuration, nameof( configuration ) );
-            Arg.NotNull( options, nameof( options ) );
-
             this.configuration = configuration;
             this.options = options;
             controllerInfoCache = new Lazy<ConcurrentDictionary<string, HttpControllerDescriptorGroup>>( InitializeControllerInfoCache );
@@ -51,8 +46,6 @@
         /// <returns>A <see cref="IDictionary{TKey,TValue}">collection</see> of route-to-controller mapping.</returns>
         public virtual IDictionary<string, HttpControllerDescriptor> GetControllerMapping()
         {
-            Contract.Ensures( Contract.Result<IDictionary<string, HttpControllerDescriptor>>() != null );
-
             var mapping = controllerInfoCache.Value.Where( p => p.Value.Count > 0 );
             return mapping.ToDictionary( p => p.Key, p => (HttpControllerDescriptor) p.Value, OrdinalIgnoreCase );
         }
@@ -62,15 +55,21 @@
         /// </summary>
         /// <param name="request">The <see cref="HttpRequestMessage">request</see> to get a controller descriptor for.</param>
         /// <returns>The <see cref="HttpControllerDescriptor">controller descriptor</see> that matches the specified <paramref name="request"/>.</returns>
-        public virtual HttpControllerDescriptor SelectController( HttpRequestMessage request )
+        public virtual HttpControllerDescriptor? SelectController( HttpRequestMessage request )
         {
-            Arg.NotNull( request, nameof( request ) );
-            Contract.Ensures( Contract.Result<HttpControllerDescriptor>() != null );
-
             EnsureRequestHasValidApiVersion( request );
 
             var context = new ControllerSelectionContext( request, GetControllerName, controllerInfoCache );
-            var conventionRouteSelector = new ConventionRouteControllerSelector( options, controllerTypeCache );
+
+            if ( context.RequestedVersion == null )
+            {
+                if ( options.AssumeDefaultVersionWhenUnspecified )
+                {
+                    context.RequestedVersion = options.ApiVersionSelector.SelectVersion( context.Request, context.AllVersions );
+                }
+            }
+
+            var conventionRouteSelector = new ConventionRouteControllerSelector( controllerTypeCache );
             var conventionRouteResult = default( ControllerSelectionResult );
             var exceptionFactory = new HttpResponseExceptionFactory( request, new Lazy<ApiVersionModel>( () => context.AllVersions ) );
 
@@ -80,25 +79,25 @@
 
                 if ( conventionRouteResult.Succeeded )
                 {
-                    return conventionRouteResult.Controller;
+                    return request.ApiVersionProperties().SelectedController = conventionRouteResult.Controller;
                 }
 
                 throw exceptionFactory.NewNotFoundOrBadRequestException( conventionRouteResult, default );
             }
 
-            var directRouteSelector = new DirectRouteControllerSelector( options );
+            var directRouteSelector = new DirectRouteControllerSelector();
             var directRouteResult = directRouteSelector.SelectController( context );
 
             if ( directRouteResult.Succeeded )
             {
-                return directRouteResult.Controller;
+                return request.ApiVersionProperties().SelectedController = directRouteResult.Controller;
             }
 
             conventionRouteResult = conventionRouteSelector.SelectController( context );
 
             if ( conventionRouteResult.Succeeded )
             {
-                return conventionRouteResult.Controller;
+                return request.ApiVersionProperties().SelectedController = conventionRouteResult.Controller;
             }
 
             throw exceptionFactory.NewNotFoundOrBadRequestException( conventionRouteResult, directRouteResult );
@@ -109,10 +108,8 @@
         /// </summary>
         /// <param name="request">The <see cref="HttpRequestMessage">request</see> to the controller name for.</param>
         /// <returns>The name of the controller for the specified <paramref name="request"/>.</returns>
-        public virtual string GetControllerName( HttpRequestMessage request )
+        public virtual string? GetControllerName( HttpRequestMessage request )
         {
-            Arg.NotNull( request, nameof( request ) );
-
             var routeData = request.GetRouteData();
 
             if ( routeData == null )
@@ -135,9 +132,10 @@
                 virtualPathRoot = context.VirtualPathRoot ?? string.Empty;
             }
 
-            for ( var i = 0; i < routes.Count; i++ )
+            // HACK: do NOT use a normal 'for' loop here because the IIS implementation does not support indexing
+            foreach ( var route in routes )
             {
-                var otherRouteData = routes[i].GetRouteData( virtualPathRoot, request );
+                var otherRouteData = route.GetRouteData( virtualPathRoot, request );
 
                 if ( otherRouteData != null &&
                     !routeData.Equals( otherRouteData ) &&
@@ -169,7 +167,7 @@
                     {
                         var descriptor = new HttpControllerDescriptor( configuration, key, type );
 
-                        if ( conventions.Count == 0 || !conventions.ApplyTo( descriptor ) )
+                        if ( !conventions.ApplyTo( descriptor ) )
                         {
                             ApplyAttributeOrImplicitConventions( descriptor, actionSelector, implicitVersionModel );
                         }
@@ -178,12 +176,8 @@
                     }
                 }
 
-                descriptors.Sort( ByVersion );
-
-                var descriptorGroup =
-                    options.ReportApiVersions ?
-                    new HttpControllerDescriptorGroup( configuration, key, ApplyCollatedModel( descriptors, actionSelector, CollateModel( descriptors ) ) ) :
-                    new HttpControllerDescriptorGroup( configuration, key, descriptors.ToArray() );
+                var innerDescriptors = ApplyCollatedModels( descriptors, actionSelector );
+                var descriptorGroup = new HttpControllerDescriptorGroup( configuration, key, innerDescriptors );
 
                 mapping.TryAdd( key, descriptorGroup );
             }
@@ -193,19 +187,13 @@
 
         static bool IsDecoratedWithAttributes( HttpControllerDescriptor controller )
         {
-            Contract.Requires( controller != null );
-
             return controller.GetCustomAttributes<IApiVersionProvider>().Count > 0 ||
                    controller.GetCustomAttributes<IApiVersionNeutral>().Count > 0;
         }
 
         static void ApplyImplicitConventions( HttpControllerDescriptor controller, IHttpActionSelector actionSelector, ApiVersionModel implicitVersionModel )
         {
-            Contract.Requires( controller != null );
-            Contract.Requires( actionSelector != null );
-            Contract.Requires( implicitVersionModel != null );
-
-            controller.SetProperty( implicitVersionModel );
+            controller.SetApiVersionModel( implicitVersionModel );
 
             var actions = actionSelector.GetActionMapping( controller ).SelectMany( g => g );
 
@@ -217,10 +205,6 @@
 
         static void ApplyAttributeOrImplicitConventions( HttpControllerDescriptor controller, IHttpActionSelector actionSelector, ApiVersionModel implicitVersionModel )
         {
-            Contract.Requires( controller != null );
-            Contract.Requires( actionSelector != null );
-            Contract.Requires( implicitVersionModel != null );
-
             if ( IsDecoratedWithAttributes( controller ) )
             {
                 var conventions = new ControllerApiVersionConventionBuilder( controller.ControllerType );
@@ -232,27 +216,66 @@
             }
         }
 
-        static ApiVersionModel CollateModel( IEnumerable<HttpControllerDescriptor> controllers ) => controllers.Select( c => c.GetApiVersionModel() ).Aggregate();
-
-        static HttpControllerDescriptor[] ApplyCollatedModel( List<HttpControllerDescriptor> controllers, IHttpActionSelector actionSelector, ApiVersionModel collatedModel )
+        static HttpControllerDescriptor[] ApplyCollatedModels( List<HttpControllerDescriptor> controllers, IHttpActionSelector actionSelector )
         {
-            Contract.Requires( controllers != null );
-            Contract.Requires( actionSelector != null );
-            Contract.Requires( collatedModel != null );
-            Contract.Ensures( Contract.Result<HttpControllerDescriptor[]>() != null );
+            var supported = new HashSet<ApiVersion>();
+            var deprecated = new HashSet<ApiVersion>();
+            var controllerModels = new List<ApiVersionModel>( controllers.Count );
+            var actionModels = new List<ApiVersionModel>( controllers.Count );
+            var visitedControllers = new List<Tuple<HttpControllerDescriptor, ApiVersionModel>>( controllers.Count );
+            var visitedActions = new List<Tuple<HttpActionDescriptor, ApiVersionModel>>( controllers.Count );
 
-            foreach ( var controller in controllers )
+            for ( var i = 0; i < controllers.Count; i++ )
             {
+                // 1 - collate controller versions
+                var controller = controllers[i];
                 var model = controller.GetApiVersionModel();
-                var actions = actionSelector.GetActionMapping( controller ).SelectMany( g => g );
 
-                controller.SetProperty( model.Aggregate( collatedModel ) );
+                if ( model.IsApiVersionNeutral )
+                {
+                    continue;
+                }
+
+                controllerModels.Add( model );
+                visitedControllers.Add( Tuple.Create( controller, model ) );
+
+                // 2 - collate action versions
+                var actions = actionSelector.GetActionMapping( controller ).SelectMany( g => g );
 
                 foreach ( var action in actions )
                 {
                     model = action.GetApiVersionModel();
-                    action.SetProperty( model.Aggregate( collatedModel ) );
+
+                    if ( model.IsApiVersionNeutral )
+                    {
+                        continue;
+                    }
+
+                    actionModels.Add( model );
+                    visitedActions.Add( Tuple.Create( action, model ) );
                 }
+            }
+
+            // 3 - apply collated action model
+            var collatedModel = actionModels.Aggregate();
+
+            for ( var i = 0; i < visitedActions.Count; i++ )
+            {
+                var (action, model) = visitedActions[i];
+
+                action.SetProperty( model.Aggregate( collatedModel ) );
+            }
+
+            // 4 - apply collated controller model
+            // note: allows controllers to report versions in 400s even when an action is unmatched
+            controllerModels.Add( collatedModel );
+            collatedModel = controllerModels.Aggregate();
+
+            for ( var i = 0; i < visitedControllers.Count; i++ )
+            {
+                var (controller, model) = visitedControllers[i];
+
+                controller.SetApiVersionModel( model.Aggregate( collatedModel ) );
             }
 
             return controllers.ToArray();
@@ -260,16 +283,14 @@
 
         static void EnsureRequestHasValidApiVersion( HttpRequestMessage request )
         {
-            Contract.Requires( request != null );
-
             try
             {
                 var apiVersion = request.GetRequestedApiVersion();
             }
             catch ( AmbiguousApiVersionException ex )
             {
-                var options = request.GetApiVersioningOptions();
-                throw new HttpResponseException( options.ErrorResponses.BadRequest( request, AmbiguousApiVersion, ex.Message ) );
+                var response = request.GetApiVersioningOptions().ErrorResponses;
+                throw new HttpResponseException( response.BadRequest( request, AmbiguousApiVersion, ex.Message ) );
             }
         }
     }

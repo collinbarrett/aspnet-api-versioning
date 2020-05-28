@@ -11,7 +11,8 @@
     using Xunit;
     using static System.Net.HttpStatusCode;
 
-    public class when_using_a_url_segment : BasicAcceptanceTest
+    [Collection( nameof( BasicCollection ) )]
+    public class when_using_a_url_segment : AcceptanceTest
     {
         [Theory]
         [InlineData( "api/v1/helloworld", nameof( HelloWorldController ), "1" )]
@@ -27,7 +28,7 @@
 
             // assert
             response.Headers.GetValues( "api-supported-versions" ).Single().Should().Be( "1.0, 2.0" );
-            content.Should().BeEquivalentTo( new { controller = controller, version = apiVersion } );
+            content.Should().BeEquivalentTo( new { controller, version = apiVersion } );
         }
 
         [Theory]
@@ -44,7 +45,7 @@
 
             // assert
             response.Headers.GetValues( "api-supported-versions" ).Single().Should().Be( "1.0, 2.0" );
-            content.Should().BeEquivalentTo( new { controller = controller, version = apiVersion, id = id } );
+            content.Should().BeEquivalentTo( new { controller, version = apiVersion, id } );
         }
 
         [Theory]
@@ -56,10 +57,39 @@
             var entity = default( object );
 
             // act
-            var response = await PostAsync( $"api/{version}/helloworld", entity ).EnsureSuccessStatusCode();
+            var response = await PostAsync( $"api/{version}/helloworld", entity );
 
             // assert
+            response.StatusCode.Should().Be( Created );
             response.Headers.Location.Should().Be( new Uri( $"http://localhost/api/{version}/HelloWorld/42" ) );
+        }
+
+        [Fact]
+        public async Task then_get_returns_400_or_405_with_invalid_id()
+        {
+            // arrange
+            var requestUrl = "api/v2/helloworld/abc";
+            var statusCode = UsingEndpointRouting ? NotFound : BadRequest;
+
+            // act
+            var response = await GetAsync( requestUrl );
+
+            // assert
+            response.StatusCode.Should().Be( statusCode );
+        }
+
+        [Theory]
+        [InlineData( "api/v1/helloworld/42" )]
+        [InlineData( "api/v2/helloworld/42" )]
+        public async Task then_delete_should_return_405( string requestUrl )
+        {
+            // arrange
+
+            // act
+            var response = await DeleteAsync( requestUrl );
+
+            // assert
+            response.StatusCode.Should().Be( MethodNotAllowed );
         }
 
         [Fact]
@@ -91,7 +121,15 @@
 
             // assert
             response.Headers.GetValues( "api-supported-versions" ).Single().Should().Be( "1.0, 2.0" );
-            content.Should().BeEquivalentTo( new { controller = controller, query = "Foo", version = apiVersion } );
+            content.Should().BeEquivalentTo( new { controller, query = "Foo", version = apiVersion } );
         }
+
+        public when_using_a_url_segment( BasicFixture fixture ) : base( fixture ) { }
+    }
+
+    [Collection( nameof( BasicEndpointCollection ) )]
+    public class when_using_a_url_segment_ : when_using_a_url_segment
+    {
+        public when_using_a_url_segment_( BasicEndpointFixture fixture ) : base( fixture ) { }
     }
 }

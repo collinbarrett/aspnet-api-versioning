@@ -1,8 +1,9 @@
 ﻿namespace Microsoft.AspNetCore.Mvc.Versioning
 {
     using Microsoft.AspNetCore.Hosting;
+    using Microsoft.Extensions.Hosting;
     using System;
-    using System.Diagnostics.Contracts;
+    using System.Diagnostics.CodeAnalysis;
     using static System.String;
 
     /// <summary>
@@ -18,7 +19,11 @@
         /// <returns>The generated <see cref="IActionResult">response</see>.</returns>
         public virtual IActionResult CreateResponse( ErrorResponseContext context )
         {
-            Arg.NotNull( context, nameof( context ) );
+            if ( context == null )
+            {
+                throw new ArgumentNullException( nameof( context ) );
+            }
+
             return new ObjectResult( CreateErrorContent( context ) ) { StatusCode = context.StatusCode };
         }
 
@@ -29,8 +34,10 @@
         /// <returns>An <see cref="object"/> representing the error content.</returns>
         protected virtual object CreateErrorContent( ErrorResponseContext context )
         {
-            Arg.NotNull( context, nameof( context ) );
-            Contract.Ensures( Contract.Result<object>() != null );
+            if ( context == null )
+            {
+                throw new ArgumentNullException( nameof( context ) );
+            }
 
             return new
             {
@@ -43,26 +50,24 @@
             };
         }
 
-        static string NullIfEmpty( string value ) => IsNullOrEmpty( value ) ? null : value;
+        static string? NullIfEmpty( string value ) => IsNullOrEmpty( value ) ? null : value;
 
+        [return: MaybeNull]
         static TError NewInnerError<TError>( ErrorResponseContext context, Func<ErrorResponseContext, TError> create )
         {
-            Contract.Requires( context != null );
-            Contract.Requires( create != null );
-
             if ( IsNullOrEmpty( context.MessageDetail ) )
             {
-                return default;
+                return default!;
             }
 
-            var environment = (IHostingEnvironment) context.Request.HttpContext.RequestServices.GetService( typeof( IHostingEnvironment ) );
+            var environment = (IWebHostEnvironment) context.Request.HttpContext.RequestServices.GetService( typeof( IWebHostEnvironment ) );
 
             if ( environment?.IsDevelopment() == true )
             {
                 return create( context );
             }
 
-            return default;
+            return default!;
         }
     }
 }

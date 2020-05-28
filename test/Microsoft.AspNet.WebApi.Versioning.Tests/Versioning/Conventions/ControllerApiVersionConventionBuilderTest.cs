@@ -75,7 +75,7 @@
             var configuration = new HttpConfiguration();
             var mock = new Mock<HttpControllerDescriptor>() { CallBase = true };
             var controllerDescriptor = mock.Object;
-            var controllerBuilder = default( ControllerApiVersionConventionBuilder );
+            var controllerBuilder = default( IControllerConventionBuilder );
 
             mock.Setup( cd => cd.GetCustomAttributes<IApiVersionProvider>() ).Returns( new Collection<IApiVersionProvider>() );
             controllerDescriptor.Configuration = configuration;
@@ -86,15 +86,17 @@
                              .AdvertisesApiVersion( 3, 0 )
                              .AdvertisesDeprecatedApiVersion( 3, 0, "Beta" );
 
+            var actionDescriptor = configuration.Services.GetActionSelector().GetActionMapping( controllerDescriptor ).SelectMany( g => g ).Single();
+
             // act
             controllerBuilder.ApplyTo( controllerDescriptor );
 
             // assert
-            controllerDescriptor.GetApiVersionModel().Should().BeEquivalentTo(
+            actionDescriptor.GetApiVersionModel().Should().BeEquivalentTo(
                 new
                 {
                     IsApiVersionNeutral = false,
-                    DeclaredApiVersions = new[] { new ApiVersion( 0, 9 ), new ApiVersion( 2, 0 ) },
+                    DeclaredApiVersions = new ApiVersion[0],
                     SupportedApiVersions = new[] { new ApiVersion( 2, 0 ), new ApiVersion( 3, 0 ) },
                     DeprecatedApiVersions = new[] { new ApiVersion( 0, 9 ), new ApiVersion( 3, 0, "Beta" ) },
                     ImplementedApiVersions = new[] { new ApiVersion( 0, 9 ), new ApiVersion( 2, 0 ), new ApiVersion( 3, 0 ), new ApiVersion( 3, 0, "Beta" ) }
@@ -108,7 +110,7 @@
             var configuration = new HttpConfiguration();
             var mock = new Mock<HttpControllerDescriptor>() { CallBase = true };
             var controllerDescriptor = mock.Object;
-            var controllerBuilder = default( ControllerApiVersionConventionBuilder );
+            var controllerBuilder = default( IControllerConventionBuilder );
 
             mock.Setup( cd => cd.GetCustomAttributes<IApiVersionProvider>() ).Returns( new Collection<IApiVersionProvider>() );
             controllerDescriptor.Configuration = configuration;
@@ -120,11 +122,13 @@
                              .AdvertisesDeprecatedApiVersion( 3, 0, "Beta" )
                              .IsApiVersionNeutral();
 
+            var actionDescriptor = configuration.Services.GetActionSelector().GetActionMapping( controllerDescriptor ).SelectMany( g => g ).Single();
+
             // act
             controllerBuilder.ApplyTo( controllerDescriptor );
 
             // assert
-            controllerDescriptor.GetApiVersionModel().Should().BeEquivalentTo(
+            actionDescriptor.GetApiVersionModel().Should().BeEquivalentTo(
                 new
                 {
                     IsApiVersionNeutral = true,
@@ -143,7 +147,7 @@
             var mock = new Mock<HttpControllerDescriptor>() { CallBase = true };
             var controllerDescriptor = mock.Object;
             var attributes = new Collection<IApiVersionProvider>( typeof( DecoratedController ).GetCustomAttributes().OfType<IApiVersionProvider>().ToList() );
-            var controllerBuilder = default( ControllerApiVersionConventionBuilder );
+            var controllerBuilder = default( IControllerConventionBuilder );
 
             mock.Setup( cd => cd.GetCustomAttributes<IApiVersionProvider>() ).Returns( attributes );
             controllerDescriptor.Configuration = configuration;
@@ -152,15 +156,17 @@
             controllerBuilder.HasApiVersion( 1, 0 )
                              .AdvertisesApiVersion( 4, 0 );
 
+            var actionDescriptor = configuration.Services.GetActionSelector().GetActionMapping( controllerDescriptor ).SelectMany( g => g ).Single();
+
             // act
             controllerBuilder.ApplyTo( controllerDescriptor );
 
             // assert
-            controllerDescriptor.GetApiVersionModel().Should().BeEquivalentTo(
+            actionDescriptor.GetApiVersionModel().Should().BeEquivalentTo(
                 new
                 {
                     IsApiVersionNeutral = false,
-                    DeclaredApiVersions = new[] { new ApiVersion( 0, 9 ), new ApiVersion( 1, 0 ), new ApiVersion( 2, 0 ) },
+                    DeclaredApiVersions = new ApiVersion[0],
                     SupportedApiVersions = new[] { new ApiVersion( 1, 0 ), new ApiVersion( 2, 0 ), new ApiVersion( 3, 0 ), new ApiVersion( 4, 0 ) },
                     DeprecatedApiVersions = new[] { new ApiVersion( 0, 9 ), new ApiVersion( 3, 0, "Beta" ) },
                     ImplementedApiVersions = new[] { new ApiVersion( 0, 9 ), new ApiVersion( 1, 0 ), new ApiVersion( 2, 0 ), new ApiVersion( 3, 0 ), new ApiVersion( 3, 0, "Beta" ), new ApiVersion( 4, 0 ) }

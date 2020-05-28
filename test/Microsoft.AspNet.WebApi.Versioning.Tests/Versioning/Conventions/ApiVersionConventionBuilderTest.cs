@@ -7,6 +7,7 @@
     using System.Web.Http;
     using System.Web.Http.Controllers;
     using Xunit;
+    using static ApiVersionMapping;
 
     public class ApiVersionConventionBuilderTest
     {
@@ -83,7 +84,7 @@
         }
 
         [Fact]
-        public void controller_should_not_allow_both_compileX2Dtime_and_runX2Dtime_conventions()
+        public void controller_should_allow_both_compileX2Dtime_and_runX2Dtime_conventions()
         {
             // arrange
             var conventionBuilder = new ApiVersionConventionBuilder();
@@ -94,11 +95,11 @@
             Action controllerConvention = () => conventionBuilder.Controller( typeof( StubController ) );
 
             // assert
-            controllerConvention.Should().Throw<InvalidOperationException>();
+            controllerConvention.Should().NotThrow<InvalidOperationException>();
         }
 
         [Fact]
-        public void controller_for_type_should_not_allow_both_compileX2Dtime_and_runX2Dtime_conventions()
+        public void controller_for_type_should_allow_both_compileX2Dtime_and_runX2Dtime_conventions()
         {
             // arrange
             var conventionBuilder = new ApiVersionConventionBuilder();
@@ -109,7 +110,7 @@
             Action controllerConvention = () => conventionBuilder.Controller<StubController>();
 
             // assert
-            controllerConvention.Should().Throw<InvalidOperationException>();
+            controllerConvention.Should().NotThrow<InvalidOperationException>();
         }
 
         [Fact]
@@ -123,11 +124,13 @@
             conventionBuilder.Add( new VersionByNamespaceConvention() );
             configuration.AddApiVersioning( o => o.Conventions = conventionBuilder );
 
+            var actionDescriptor = configuration.Services.GetActionSelector().GetActionMapping( controllerDescriptor ).SelectMany( g => g ).Single();
+
             // act
             conventionBuilder.ApplyTo( controllerDescriptor );
 
             // assert
-            controllerDescriptor.GetApiVersionModel().DeclaredApiVersions.Single().Should().Be( new ApiVersion( 2, 0 ) );
+            actionDescriptor.MappingTo( new ApiVersion( 2, 0 ) ).Should().Be( Implicit );
         }
 
         sealed class TestApiVersionConventionBuilder : ApiVersionConventionBuilder

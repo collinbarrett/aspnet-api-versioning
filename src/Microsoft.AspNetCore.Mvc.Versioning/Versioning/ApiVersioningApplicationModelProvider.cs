@@ -4,10 +4,6 @@
     using Microsoft.AspNetCore.Mvc.Versioning.Conventions;
     using Microsoft.Extensions.Options;
     using System;
-    using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
-    using System.Linq;
-    using System.Reflection;
 
     /// <summary>
     /// Represents an <see cref="IApplicationModelProvider">application model provider</see>, which
@@ -22,10 +18,11 @@
         /// Initializes a new instance of the <see cref="ApiVersioningApplicationModelProvider"/> class.
         /// </summary>
         /// <param name="options">The current <see cref="ApiVersioningOptions">API versioning options</see>.</param>
-        public ApiVersioningApplicationModelProvider( IOptions<ApiVersioningOptions> options )
+        /// <param name="controllerFilter">The <see cref="IApiControllerFilter">filter</see> used for API controllers.</param>
+        public ApiVersioningApplicationModelProvider( IOptions<ApiVersioningOptions> options, IApiControllerFilter controllerFilter )
         {
-            Arg.NotNull( options, nameof( options ) );
             this.options = options;
+            ControllerFilter = controllerFilter;
         }
 
         /// <summary>
@@ -34,34 +31,40 @@
         /// <value>The current <see cref="ApiVersioningOptions">API versioning options</see>.</value>
         protected ApiVersioningOptions Options => options.Value;
 
+        /// <summary>
+        /// Gets the filter used for API controllers.
+        /// </summary>
+        /// <value>The <see cref="IApiControllerFilter"/> used to filter API controllers.</value>
+        protected IApiControllerFilter ControllerFilter { get; }
+
         /// <inheritdoc />
         public int Order { get; protected set; }
 
         /// <inheritdoc />
         public virtual void OnProvidersExecuted( ApplicationModelProviderContext context )
         {
-            Arg.NotNull( context, nameof( context ) );
+            if ( context == null )
+            {
+                throw new ArgumentNullException( nameof( context ) );
+            }
 
             var implicitVersionModel = new ApiVersionModel( Options.DefaultApiVersion );
             var conventionBuilder = Options.Conventions;
             var application = context.Result;
-            var controllers = FilterControllers( application.Controllers );
+            var controllers = application.Controllers;
 
-            if ( conventionBuilder.Count == 0 )
+            if ( Options.UseApiBehavior )
             {
-                foreach ( var controller in controllers )
+                controllers = ControllerFilter.Apply( controllers );
+            }
+
+            for ( var i = 0; i < controllers.Count; i++ )
+            {
+                var controller = controllers[i];
+
+                if ( !conventionBuilder.ApplyTo( controller ) )
                 {
                     ApplyAttributeOrImplicitConventions( controller, implicitVersionModel );
-                }
-            }
-            else
-            {
-                foreach ( var controller in controllers )
-                {
-                    if ( !conventionBuilder.ApplyTo( controller ) )
-                    {
-                        ApplyAttributeOrImplicitConventions( controller, implicitVersionModel );
-                    }
                 }
             }
         }
@@ -69,43 +72,12 @@
         /// <inheritdoc />
         public virtual void OnProvidersExecuting( ApplicationModelProviderContext context ) { }
 
-        IEnumerable<ControllerModel> FilterControllers( IEnumerable<ControllerModel> controllers )
-        {
-            Contract.Requires( controllers != null );
-            Contract.Ensures( Contract.Result<IEnumerable<ControllerModel>>() != null );
-
-            if ( !Options.UseApiBehavior )
-            {
-                return controllers;
-            }
-
-            var assembly = typeof( ControllerAttribute ).Assembly;
-            var apiBehaviorSupported = assembly.ExportedTypes.Any( t => t.Name == "ApiControllerAttribute" );
-
-            return apiBehaviorSupported ? controllers.Where( IsApiController ) : controllers;
-        }
-
-        static bool IsApiController( ControllerModel controller )
-        {
-            if ( controller.Attributes.Any( IsApiBehaviorMetadata ) )
-            {
-                return true;
-            }
-
-            var controllerAssembly = controller.ControllerType.Assembly;
-            var assemblyAttributes = controllerAssembly.GetCustomAttributes();
-
-            return assemblyAttributes.Any( IsApiBehaviorMetadata );
-        }
-
-        static bool IsApiBehaviorMetadata( object attribute ) => attribute.GetType().GetInterfaces().Any( i => i.Name == "IApiBehaviorMetadata" );
-
         static bool IsDecoratedWithAttributes( ControllerModel controller )
         {
-            Contract.Requires( controller != null );
-
-            foreach ( var attribute in controller.Attributes )
+            for ( var i = 0; i < controller.Attributes.Count; i++ )
             {
+                var attribute = controller.Attributes[i];
+
                 if ( attribute is IApiVersionProvider || attribute is IApiVersionNeutral )
                 {
                     return true;
@@ -117,25 +89,19 @@
 
         static void ApplyImplicitConventions( ControllerModel controller, ApiVersionModel implicitVersionModel )
         {
-            Contract.Requires( controller != null );
-            Contract.Requires( implicitVersionModel != null );
-
-            controller.SetProperty( implicitVersionModel );
-
-            foreach ( var action in controller.Actions )
+            for ( var i = 0; i < controller.Actions.Count; i++ )
             {
+                var action = controller.Actions[i];
+                action.SetProperty( controller );
                 action.SetProperty( implicitVersionModel );
             }
         }
 
         static void ApplyAttributeOrImplicitConventions( ControllerModel controller, ApiVersionModel implicitVersionModel )
         {
-            Contract.Requires( controller != null );
-            Contract.Requires( implicitVersionModel != null );
-
             if ( IsDecoratedWithAttributes( controller ) )
             {
-                var conventions = new ControllerApiVersionConventionBuilder<ControllerModel>();
+                var conventions = new ControllerApiVersionConventionBuilder( controller.ControllerType );
                 conventions.ApplyTo( controller );
             }
             else

@@ -30,7 +30,7 @@
                 client.BaseAddress = new Uri( "http://localhost" );
 
                 // act
-                response = await client.SendAsync( request );
+                response = ( await client.SendAsync( request ) ).EnsureSuccessStatusCode();
             }
 
             // assert
@@ -50,7 +50,7 @@
                     typeof( TestsController2 ),
                     typeof( TestsController3 ) );
 
-                services.AddMvc()
+                services.AddMvc( options => options.EnableEndpointRouting = false )
                         .ConfigureApplicationPartManager( m => m.ApplicationParts.Add( testControllers ) );
 
                 services.AddApiVersioning()

@@ -6,7 +6,6 @@ namespace Microsoft.AspNetCore.Mvc.Versioning.Conventions
 {
     using System;
     using System.ComponentModel;
-    using System.Diagnostics.Contracts;
     using System.Reflection;
     using static System.ComponentModel.EditorBrowsableState;
 
@@ -14,7 +13,10 @@ namespace Microsoft.AspNetCore.Mvc.Versioning.Conventions
     /// Represents a builder for API versions applied to a controller.
     /// </summary>
 #pragma warning disable SA1619 // Generic type parameters should be documented partial class; false positive
-    public partial class ControllerApiVersionConventionBuilder<T> : ControllerApiVersionConventionBuilderBase, IControllerConventionBuilder
+    public partial class ControllerApiVersionConventionBuilder<T> :
+        ControllerApiVersionConventionBuilderBase,
+        IControllerConventionBuilder,
+        IControllerConventionBuilder<T>
 #pragma warning restore SA1619
     {
         /// <summary>
@@ -35,7 +37,6 @@ namespace Microsoft.AspNetCore.Mvc.Versioning.Conventions
         /// <returns>The original <see cref="ControllerApiVersionConventionBuilder{T}"/>.</returns>
         public virtual ControllerApiVersionConventionBuilder<T> IsApiVersionNeutral()
         {
-            Contract.Ensures( Contract.Result<ControllerApiVersionConventionBuilder<T>>() != null );
             VersionNeutral = true;
             return this;
         }
@@ -47,9 +48,6 @@ namespace Microsoft.AspNetCore.Mvc.Versioning.Conventions
         /// <returns>The original <see cref="ControllerApiVersionConventionBuilder{T}"/>.</returns>
         public virtual ControllerApiVersionConventionBuilder<T> HasApiVersion( ApiVersion apiVersion )
         {
-            Arg.NotNull( apiVersion, nameof( apiVersion ) );
-            Contract.Ensures( Contract.Result<ControllerApiVersionConventionBuilder<T>>() != null );
-
             SupportedVersions.Add( apiVersion );
             return this;
         }
@@ -61,9 +59,6 @@ namespace Microsoft.AspNetCore.Mvc.Versioning.Conventions
         /// <returns>The original <see cref="ControllerApiVersionConventionBuilder{T}"/>.</returns>
         public virtual ControllerApiVersionConventionBuilder<T> HasDeprecatedApiVersion( ApiVersion apiVersion )
         {
-            Arg.NotNull( apiVersion, nameof( apiVersion ) );
-            Contract.Ensures( Contract.Result<ControllerApiVersionConventionBuilder<T>>() != null );
-
             DeprecatedVersions.Add( apiVersion );
             return this;
         }
@@ -75,9 +70,6 @@ namespace Microsoft.AspNetCore.Mvc.Versioning.Conventions
         /// <returns>The original <see cref="ControllerApiVersionConventionBuilder{T}"/>.</returns>
         public virtual ControllerApiVersionConventionBuilder<T> AdvertisesApiVersion( ApiVersion apiVersion )
         {
-            Arg.NotNull( apiVersion, nameof( apiVersion ) );
-            Contract.Ensures( Contract.Result<ControllerApiVersionConventionBuilder<T>>() != null );
-
             AdvertisedVersions.Add( apiVersion );
             return this;
         }
@@ -89,9 +81,6 @@ namespace Microsoft.AspNetCore.Mvc.Versioning.Conventions
         /// <returns>The original <see cref="ControllerApiVersionConventionBuilder{T}"/>.</returns>
         public virtual ControllerApiVersionConventionBuilder<T> AdvertisesDeprecatedApiVersion( ApiVersion apiVersion )
         {
-            Arg.NotNull( apiVersion, nameof( apiVersion ) );
-            Contract.Ensures( Contract.Result<ControllerApiVersionConventionBuilder<T>>() != null );
-
             DeprecatedAdvertisedVersions.Add( apiVersion );
             return this;
         }
@@ -102,21 +91,24 @@ namespace Microsoft.AspNetCore.Mvc.Versioning.Conventions
         /// <param name="actionMethod">The <see cref="MethodInfo">method</see> representing the controller action.</param>
         /// <returns>A new or existing <see cref="ActionApiVersionConventionBuilder{T}"/>.</returns>
         [EditorBrowsable( Never )]
-        public virtual ActionApiVersionConventionBuilder<T> Action( MethodInfo actionMethod )
-        {
-            Arg.NotNull( actionMethod, nameof( actionMethod ) );
-            Contract.Ensures( Contract.Result<ActionApiVersionConventionBuilder<T>>() != null );
-            return ActionBuilders.GetOrAdd( actionMethod );
-        }
+        public virtual ActionApiVersionConventionBuilder<T> Action( MethodInfo actionMethod ) => ActionBuilders.GetOrAdd( actionMethod );
 
-        void IControllerConventionBuilder.IsApiVersionNeutral() => IsApiVersionNeutral();
+#pragma warning disable CA1033 // Interface methods should be callable by child types
+        Type IControllerConventionBuilder.ControllerType => typeof( T );
+#pragma warning restore CA1033 // Interface methods should be callable by child types
 
-        void IControllerConventionBuilder.HasApiVersion( ApiVersion apiVersion ) => HasApiVersion( apiVersion );
+        void IDeclareApiVersionConventionBuilder.IsApiVersionNeutral() => IsApiVersionNeutral();
 
-        void IControllerConventionBuilder.HasDeprecatedApiVersion( ApiVersion apiVersion ) => HasDeprecatedApiVersion( apiVersion );
+        void IDeclareApiVersionConventionBuilder.HasApiVersion( ApiVersion apiVersion ) => HasApiVersion( apiVersion );
 
-        void IControllerConventionBuilder.AdvertisesApiVersion( ApiVersion apiVersion ) => AdvertisesApiVersion( apiVersion );
+        void IDeclareApiVersionConventionBuilder.HasDeprecatedApiVersion( ApiVersion apiVersion ) => HasDeprecatedApiVersion( apiVersion );
 
-        void IControllerConventionBuilder.AdvertisesDeprecatedApiVersion( ApiVersion apiVersion ) => AdvertisesDeprecatedApiVersion( apiVersion );
+        void IDeclareApiVersionConventionBuilder.AdvertisesApiVersion( ApiVersion apiVersion ) => AdvertisesApiVersion( apiVersion );
+
+        void IDeclareApiVersionConventionBuilder.AdvertisesDeprecatedApiVersion( ApiVersion apiVersion ) => AdvertisesDeprecatedApiVersion( apiVersion );
+
+        IActionConventionBuilder IControllerConventionBuilder.Action( MethodInfo actionMethod ) => Action( actionMethod );
+
+        IActionConventionBuilder<T> IControllerConventionBuilder<T>.Action( MethodInfo actionMethod ) => Action( actionMethod );
     }
 }
