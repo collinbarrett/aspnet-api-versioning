@@ -1,4 +1,5 @@
-﻿namespace System.Web.Http
+﻿#pragma warning disable 8603
+namespace System.Web.Http
 {
     using Microsoft.Web.Http;
     using Microsoft.Web.Http.Versioning;

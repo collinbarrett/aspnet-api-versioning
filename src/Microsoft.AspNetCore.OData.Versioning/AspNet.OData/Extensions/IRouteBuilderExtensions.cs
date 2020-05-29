@@ -249,8 +249,16 @@
 
                 IEnumerable<IODataRoutingConvention> NewRouteConventions( IServiceProvider services )
                 {
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
                     var conventions = new IODataRoutingConvention[routeConventions.Count + 1];
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+#pragma warning disable CS8604 // Possible null reference argument.
+#pragma warning disable CS8604 // Possible null reference argument.
+#pragma warning disable CS8604 // Possible null reference argument.
                     conventions[0] = new VersionedAttributeRoutingConvention( versionedRouteName, serviceProvider, apiVersion );
+#pragma warning restore CS8604 // Possible null reference argument.
+#pragma warning restore CS8604 // Possible null reference argument.
+#pragma warning restore CS8604 // Possible null reference argument.
                     routeConventions.CopyTo( conventions, 1 );
                     return conventions;
                 }

@@ -60,7 +60,9 @@
 
         public override bool Equals( object? obj ) => obj is ClassSignature s && Equals( s );
 
+#pragma warning disable CS8767 // Nullability of reference types in type of parameter doesn't match implicitly implemented member (possibly because of nullability attributes).
         public bool Equals( ClassSignature other ) => GetHashCode() == other?.GetHashCode();
+#pragma warning restore CS8767 // Nullability of reference types in type of parameter doesn't match implicitly implemented member (possibly because of nullability attributes).
 
         int ComputeHashCode()
         {
